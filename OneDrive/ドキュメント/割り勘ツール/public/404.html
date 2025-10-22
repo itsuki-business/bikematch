@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- ★ SPA用の404フォールバックページ -->
+    <!-- S3/CloudFrontでSPAルーティングを有効にする場合は、
+         403/404 を index.html にフォールバックさせる設定を行ってください。
+         この404.htmlは Amplify など一部ホスティングで必要になる場合があります。 -->
+    <meta http-equiv="refresh" content="0; url=/" />
+    <title>Not Found</title>
+    <style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:24px;line-height:1.6}</style>
+  </head>
+  <body>
+    <h1>ページが見つかりません</h1>
+    <p>トップへ自動的に戻ります。戻らない場合は <a href="/">こちら</a> をクリックしてください。</p>
+    <!-- ★ 配下パスでホストする場合は上記の "/" を環境のベースパスに合わせて修正してください（例: /warikan/） -->
+  </body>
+</html>
