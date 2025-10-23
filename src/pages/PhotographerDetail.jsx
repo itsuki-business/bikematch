@@ -54,11 +54,17 @@ export default function PhotographerDetail() {
     const fetchCurrentUser = async () => {
       setIsLoadingCurrentUser(true);
       try {
-        const cognitoUser = await Auth.currentAuthenticatedUser();
-        setCurrentUser(cognitoUser); // Keep Cognito user object
+        const cognitoUser = await getCurrentUser();
+        const attributes = await fetchUserAttributes();
+        setCurrentUser({ userId: cognitoUser.userId, attributes }); // Keep Cognito user object
 
         // Fetch App DB user data
-        const userDataResult = await API.graphql(graphqlOperation(getUser, { id: cognitoUser.attributes.sub }));
+        const client = generateClient();
+        const userDataResult = await client.graphql({
+          query: getUser,
+          variables: { id: cognitoUser.userId },
+          authMode: 'userPool'
+        });
         setCurrentUserApp(userDataResult.data?.getUser || null);
 
       } catch (error) {
@@ -79,7 +85,12 @@ export default function PhotographerDetail() {
     queryFn: async () => {
       if (!photographerId) throw new Error("Photographer ID missing");
       // --- Amplify API (GraphQL) ---
-      const result = await API.graphql(graphqlOperation(getUser, { id: photographerId }));
+      const client = generateClient();
+      const result = await client.graphql({
+        query: getUser,
+        variables: { id: photographerId },
+        authMode: 'userPool'
+      });
       const fetchedUser = result.data?.getUser;
       if (!fetchedUser || fetchedUser.user_type !== 'photographer') {
           throw new Error("Photographer not found or invalid user type");
@@ -108,10 +119,15 @@ export default function PhotographerDetail() {
       if (!photographerId) return [];
       try {
         // --- Amplify API (GraphQL) ---
-        const result = await API.graphql(graphqlOperation(listPortfolios, { // Adjust query name
-          filter: { photographer_id: { eq: photographerId } },
-          limit: 20 // Add limit
-        }));
+        const client = generateClient();
+        const result = await client.graphql({
+          query: listPortfolios,
+          variables: {
+            filter: { photographer_id: { eq: photographerId } },
+            limit: 20
+          },
+          authMode: 'userPool'
+        });
         const items = result.data?.listPortfolios?.items || [];
         // Fetch S3 URLs for portfolio images
         const itemsWithUrls = await Promise.all(items.map(async (item) => ({
@@ -142,12 +158,15 @@ export default function PhotographerDetail() {
        if (!photographerId) return [];
       try {
         // --- Amplify API (GraphQL) ---
-        const result = await API.graphql(graphqlOperation(listReviews, { // Adjust query name
+        const client = generateClient();
+        const result = await client.graphql({
+          query: listReviews,
+          variables: {
             filter: { reviewee_id: { eq: photographerId } },
-            // Sorting might need a dedicated index (e.g., GSI) in DynamoDB/GraphQL schema
-            // sortDirection: 'DESC', // If supported by the query/index
-            limit: 50 // Add limit
-        }));
+            limit: 50
+          },
+          authMode: 'userPool'
+        });
         let fetchedReviews = result.data?.listReviews?.items || [];
         // Client-side sort if GraphQL doesn't sort
         fetchedReviews.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); // createdAt field assumed
@@ -156,7 +175,11 @@ export default function PhotographerDetail() {
          const reviewsWithReviewer = await Promise.all(fetchedReviews.map(async (review) => {
              let reviewer = null;
              try {
-                 const reviewerData = await API.graphql(graphqlOperation(getUser, { id: review.reviewer_id }));
+                 const reviewerData = await client.graphql({
+                   query: getUser,
+                   variables: { id: review.reviewer_id },
+                   authMode: 'userPool'
+                 });
                  reviewer = reviewerData.data?.getUser;
                  if (reviewer?.profile_image) {
                      reviewer.profile_image_url = await getS3Url(reviewer.profile_image);
@@ -191,16 +214,19 @@ export default function PhotographerDetail() {
      mutationFn: async () => {
        if (!currentUser || !currentUserApp || !photographer) throw new Error("Missing user data");
        if (currentUserApp.user_type !== 'rider') throw new Error("Only riders can initiate conversations.");
-       if (currentUser.attributes.sub === photographerId) throw new Error("Cannot message yourself.");
+       if (currentUser.userId === photographerId) throw new Error("Cannot message yourself.");
 
-       const currentUserId = currentUser.attributes.sub;
+       const currentUserId = currentUser.userId;
 
        // 1. Check if conversation already exists
        // This requires a query like listConversations with filter on both IDs
        // Example assuming such a query exists or listConversations fetches all:
        let existingConversation = null;
        try {
-           const convResult = await API.graphql(graphqlOperation(listConversations, { // Adjust query name
+           const client = generateClient();
+           const convResult = await client.graphql({
+             query: listConversations,
+             variables: {
                filter: {
                    and: [ // Check both combinations
                        { biker_id: { eq: currentUserId }, photographer_id: { eq: photographerId } },
@@ -208,20 +234,26 @@ export default function PhotographerDetail() {
                    ]
                    // OR potentially use a more specific query if available
                },
-               limit: 1 // Only need one if it exists
-           }));
+               limit: 1
+             },
+             authMode: 'userPool'
+           });
            existingConversation = convResult.data?.listConversations?.items?.[0];
 
             // Check the other combination if needed, depending on schema/query
             if (!existingConversation) {
-                 const convResult2 = await API.graphql(graphqlOperation(listConversations, {
+                 const convResult2 = await client.graphql({
+                   query: listConversations,
+                   variables: {
                      filter: {
                          and: [
                              { biker_id: { eq: photographerId }, photographer_id: { eq: currentUserId } }
                          ]
                      },
                      limit: 1
-                 }));
+                   },
+                   authMode: 'userPool'
+                 });
                  existingConversation = convResult2.data?.listConversations?.items?.[0];
             }
 
@@ -249,7 +281,12 @@ export default function PhotographerDetail() {
        };
        console.log("Creating conversation input:", conversationInput);
        // --- Amplify API (GraphQL) ---
-       const result = await API.graphql(graphqlOperation(createConversation, { input: conversationInput }));
+       const client = generateClient();
+       const result = await client.graphql({
+         query: createConversation,
+         variables: { input: conversationInput },
+         authMode: 'userPool'
+       });
        const newConversation = result.data?.createConversation;
        if (!newConversation) throw new Error("Failed to create conversation");
        return newConversation;
@@ -261,7 +298,7 @@ export default function PhotographerDetail() {
      },
      onSuccess: (conversationData) => {
        // Invalidate conversations list for the current user
-       queryClient.invalidateQueries({ queryKey: ['conversations', currentUser?.attributes?.sub] });
+       queryClient.invalidateQueries({ queryKey: ['conversations', currentUser?.userId] });
        // Navigate to the detail page
        navigate(createPageUrl("ConversationDetail") + `?id=${conversationData.id}`);
      },
