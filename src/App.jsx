@@ -1,8 +1,8 @@
 import './App.css'
-import Pages from "@/pages/index.jsx"
-import { Toaster } from "@/components/ui/toaster"
+import Pages from '@/pages/index.jsx'
+import { Toaster } from '@/components/ui/toaster'
 
-function App() {
+export default function App() {
   return (
     <>
       <Pages />
@@ -10,5 +10,3 @@ function App() {
     </>
   )
 }
-
-export default App 

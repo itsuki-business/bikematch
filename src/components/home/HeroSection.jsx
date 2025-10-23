@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 
 export default function HeroSection() {
   return (
-    <div className="relative bg-gradient-to-r from-gray-900 via-gray-800 to-black text-white overflow-hidden">
+    <div className="relative bg-gradient-to-r from-blue-600 via-blue-500 to-blue-700 text-white overflow-hidden">
       <div className="absolute inset-0 opacity-10">
         <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1558981852-426c6c22a060?w=1600')] bg-cover bg-center" />
       </div>
@@ -30,7 +30,7 @@ export default function HeroSection() {
             <span className="text-red-500">最高の一枚</span>に
           </h1>
           
-          <p className="text-xl md:text-2xl text-gray-300 mb-8 leading-relaxed">
+          <p className="text-xl md:text-2xl text-blue-100 mb-8 leading-relaxed">
             バイク専門フォトグラファーとマッチング。<br />
             ツーリングの思い出、カスタムバイクの記録、サーキット走行の瞬間を、<br />
             プロの技術で美しく残しませんか？

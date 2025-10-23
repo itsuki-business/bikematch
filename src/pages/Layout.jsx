@@ -1,6 +1,4 @@
-
-
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Home, User, MessageSquare, FileText, LogOut, Camera, Bike, Star, UserPlus } from "lucide-react";
@@ -20,139 +18,206 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { base44 } from "@/api/base44Client";
+// --- Amplify ---
+import { Hub } from 'aws-amplify/utils';
+import { getCurrentUser, signOut } from 'aws-amplify/auth';
+import { generateClient } from 'aws-amplify/api';
+import { getUser } from '@/graphql/queries';
+// ---------------
 
 export default function Layout({ children, currentPageName }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const [user, setUser] = React.useState(null);
-  const [showLoginModal, setShowLoginModal] = React.useState(false);
-  const [showRegisterModal, setShowRegisterModal] = React.useState(false);
+  const [user, setUser] = useState(null);
+  const [cognitoUser, setCognitoUser] = useState(null);
+  const [appUser, setAppUser] = useState(null);
+  const [isLoadingUser, setIsLoadingUser] = useState(true);
 
-  React.useEffect(() => {
-    base44.auth.me().then(setUser).catch(() => setUser(null));
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showRegisterModal, setShowRegisterModal] = useState(false);
+
+  useEffect(() => {
+    setIsLoadingUser(true);
+    const unsubscribe = Hub.listen('auth', ({ payload: { event, data } }) => {
+      console.log('Hub event:', event, 'data:', data);
+      switch (event) {
+        case 'signedIn':
+        case 'autoSignIn':
+           console.log('Setting cognitoUser from Hub:', data);
+           // dataがユーザー情報を含む場合と、data.userを含む場合がある
+           const userData = data.user || data;
+           setCognitoUser(userData);
+           fetchAppUserData(userData.username || userData.userId || userData.attributes?.sub);
+           break;
+        case 'signedOut':
+        case 'signOut':
+           console.log('Signing out, clearing user data');
+           setCognitoUser(null);
+           setAppUser(null);
+           setUser(null);
+           setIsLoadingUser(false);
+           break;
+        default:
+          break;
+      }
+    });
+
+    checkCurrentUser();
+    return unsubscribe;
   }, []);
 
-  const handleLoginSuccess = (userData) => {
-    setUser(userData);
+  useEffect(() => {
+    if (cognitoUser) {
+      // cognitoUserが存在すれば、appUserの有無に関わらずuserをセット
+      setUser({
+        id: cognitoUser.username || cognitoUser.userId || cognitoUser.attributes?.sub,
+        username: cognitoUser.username || cognitoUser.userId,
+        email: cognitoUser.attributes?.email,
+        ...appUser, // appUserがあれば追加情報をマージ
+      });
+      setIsLoadingUser(false);
+    } else {
+      setUser(null);
+      setIsLoadingUser(false);
+    }
+  }, [cognitoUser, appUser]);
+
+  const checkCurrentUser = async () => {
+    try {
+      const current = await getCurrentUser();
+      console.log('checkCurrentUser - current user:', current);
+      setCognitoUser(current);
+      await fetchAppUserData(current.username || current.userId);
+    } catch (error) {
+      console.log('checkCurrentUser - not authenticated:', error);
+      setCognitoUser(null);
+      setAppUser(null);
+      setUser(null);
+      setIsLoadingUser(false);
+    }
+  };
+
+  const fetchAppUserData = async (userId) => {
+    if (!userId) {
+      console.log('fetchAppUserData - no userId provided');
+      setAppUser({});
+      return;
+    }
+    try {
+      const client = generateClient();
+      const result = await client.graphql({ query: getUser, variables: { id: userId } });
+      const fetchedUser = result.data.getUser;
+      console.log('fetchAppUserData - fetched user:', fetchedUser);
+      if (fetchedUser) {
+        setAppUser(fetchedUser);
+      } else {
+        console.log('fetchAppUserData - user not found in DB, setting empty object');
+        setAppUser({});
+      }
+    } catch (error) {
+      console.error("Error fetching application user data:", error);
+      // エラーでも空オブジェクトをセットして、ログイン状態は維持
+      setAppUser({});
+    }
+  };
+
+  const handleLoginSuccess = async () => {
+    console.log('Layout - Login success, closing modal and navigating to HomeForRegister');
     setShowLoginModal(false);
-    // ログイン後に自動更新
-    setTimeout(() => {
-      window.location.reload();
-    }, 500);
+    
+    // 認証状態を再チェック
+    await checkCurrentUser();
+    
+    // ログイン成功後、登録者専用のHomeページ（src/pages/HomeForRegister.jsx）に直接遷移
+    navigate('/HomeForRegister');
   };
 
-  const handleRegisterSuccess = (userData) => {
-    setUser(userData);
+  const handleRegisterSuccess = async () => {
+    console.log('Layout - Register success, closing modal and navigating to HomeForRegister');
     setShowRegisterModal(false);
-    // 登録後に自動更新
-    setTimeout(() => {
-      window.location.reload();
-    }, 500);
+    
+    // 認証状態を再チェック
+    await checkCurrentUser();
+    
+    // 登録成功後、登録者専用のHomeページ（src/pages/HomeForRegister.jsx）に直接遷移
+    navigate('/HomeForRegister');
   };
 
-  // ログイン前のナビゲーションアイテム
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      navigate('/HomeForNonRegister');
+    } catch (error) {
+      console.error('Error signing out: ', error);
+    }
+  };
+
   const publicNavigationItems = [
-    {
-      title: "ホーム",
-      url: createPageUrl("Home"),
-      icon: Home,
-    },
-    {
-      title: "利用規約",
-      url: createPageUrl("Terms"),
-      icon: FileText,
-    },
+    { title: "ホーム", url: "/HomeForNonRegister", icon: Home },
+    { title: "利用規約", url: createPageUrl("Terms"), icon: FileText },
   ];
-
-  // ログイン後のナビゲーションアイテム
   const authenticatedNavigationItems = [
-    {
-      title: "ホーム",
-      url: createPageUrl("Home"),
-      icon: Home,
-    },
-    {
-      title: "プロフィール",
-      url: createPageUrl("Profile"),
-      icon: User,
-    },
-    {
-      title: "メッセージ",
-      url: createPageUrl("Messages"),
-      icon: MessageSquare,
-    },
-    {
-      title: "評価・口コミ",
-      url: createPageUrl("Reviews"),
-      icon: Star,
-    },
-    {
-      title: "利用規約",
-      url: createPageUrl("Terms"),
-      icon: FileText,
-    },
+    { title: "ホーム", url: "/HomeForRegister", icon: Home },
+    { title: "プロフィール", url: createPageUrl("Profile"), icon: User },
+    { title: "メッセージ", url: createPageUrl("Messages"), icon: MessageSquare },
+    { title: "評価・口コミ", url: createPageUrl("Reviews"), icon: Star },
+    { title: "利用規約", url: createPageUrl("Terms"), icon: FileText },
   ];
-
   const navigationItems = user ? authenticatedNavigationItems : publicNavigationItems;
 
-  const handleLogout = () => {
-    base44.auth.logout(createPageUrl("Home"));
-  };
+  if (isLoadingUser) {
+      return (
+          <div className="min-h-screen flex items-center justify-center">
+              <div>Loading...</div>
+          </div>
+      );
+  }
 
   return (
     <SidebarProvider>
-      <style>{`
-        :root {
-          --primary-black: #0a0a0a;
-          --accent-red: #dc2626;
-          --metallic-silver: #e5e7eb;
-          --dark-gray: #1f2937;
-          --light-gray: #f9fafb;
-        }
-      `}</style>
-      <div className="min-h-screen flex w-full bg-gradient-to-br from-gray-50 to-gray-100">
-        <Sidebar className="border-r border-gray-200 bg-white">
-          <SidebarHeader className="border-b border-gray-200 p-6">
-            <Link to={createPageUrl("Home")} className="flex items-center gap-3 group">
-              <div className="relative">
-                <div className="w-12 h-12 bg-gradient-to-br from-red-600 to-red-700 rounded-xl flex items-center justify-center shadow-lg transform transition-transform duration-300 group-hover:scale-110">
-                  <Bike className="w-7 h-7 text-white" />
-                </div>
-                <Camera className="w-5 h-5 text-red-600 absolute -bottom-1 -right-1 bg-white rounded-full p-0.5" />
-              </div>
-              <div>
-                <h2 className="font-bold text-xl text-gray-900">BikeMatch</h2>
-                <p className="text-xs text-gray-500">バイク×フォトグラファー</p>
-              </div>
+      <style>{``}</style>
+      <div className="min-h-screen flex w-full bg-gradient-to-br from-blue-50 to-white">
+        <Sidebar className="border-r border-gray-200 bg-white shadow-lg">
+          <SidebarHeader className="border-b border-gray-200 p-6 bg-gradient-to-r from-blue-50 to-white">
+            <Link to={user ? "/HomeForRegister" : "/HomeForNonRegister"} className="flex items-center gap-3 group">
+               <div className="relative">
+                 <div className="w-12 h-12 bg-gradient-to-br from-red-600 to-red-700 rounded-xl flex items-center justify-center shadow-lg transform transition-transform duration-300 group-hover:scale-110">
+                   <Bike className="w-7 h-7 text-white" />
+                 </div>
+                 <Camera className="w-5 h-5 text-red-600 absolute -bottom-1 -right-1 bg-white rounded-full p-0.5" />
+               </div>
+               <div>
+                 <h2 className="font-bold text-xl text-gray-900">BikeMatch</h2>
+                 <p className="text-xs text-gray-500">バイク×フォトグラファー</p>
+               </div>
             </Link>
           </SidebarHeader>
-          
-          <SidebarContent className="p-3">
-            <SidebarGroup>
-              <SidebarGroupLabel className="text-xs font-medium text-gray-500 uppercase tracking-wider px-3 py-2">
-                メニュー
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {navigationItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton 
-                        asChild 
-                        className={`hover:bg-red-50 hover:text-red-700 transition-all duration-200 rounded-xl mb-1 ${
-                          location.pathname === item.url ? 'bg-red-50 text-red-700 shadow-sm' : ''
-                        }`}
-                      >
-                        <Link to={item.url} className="flex items-center gap-3 px-4 py-3">
-                          <item.icon className="w-5 h-5" />
-                          <span className="font-medium">{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
+
+          <SidebarContent className="p-3 bg-white">
+             <SidebarGroup>
+               <SidebarGroupLabel className="text-xs font-medium text-gray-500 uppercase tracking-wider px-3 py-2">
+                 メニュー
+               </SidebarGroupLabel>
+               <SidebarGroupContent>
+                 <SidebarMenu>
+                   {navigationItems.map((item) => (
+                     <SidebarMenuItem key={item.title}>
+                       <SidebarMenuButton
+                         asChild
+                         className={`hover:bg-red-50 hover:text-red-700 transition-all duration-200 rounded-xl mb-1 ${
+                           location.pathname.toLowerCase() === item.url.toLowerCase() ? 'bg-red-50 text-red-700 shadow-sm' : ''
+                         }`}
+                       >
+                         <Link to={item.url} className="flex items-center gap-3 px-4 py-3">
+                           <item.icon className="w-5 h-5" />
+                           <span className="font-medium">{item.title}</span>
+                         </Link>
+                       </SidebarMenuButton>
+                     </SidebarMenuItem>
+                   ))}
+                 </SidebarMenu>
+               </SidebarGroupContent>
+             </SidebarGroup>
 
             {user && (
               <SidebarGroup>
@@ -161,25 +226,25 @@ export default function Layout({ children, currentPageName }) {
                 </SidebarGroupLabel>
                 <SidebarGroupContent>
                   <div className="px-4 py-3 space-y-2">
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="text-gray-600">タイプ:</span>
-                      <span className={`font-semibold ${user.user_type === 'photographer' ? 'text-red-600' : user.user_type === 'rider' ? 'text-blue-600' : 'text-gray-600'}`}>
-                        {user.user_type === 'photographer' ? 'フォトグラファー' : user.user_type === 'rider' ? 'ライダー' : '未設定'}
-                      </span>
-                    </div>
+                    {user.user_type && (
+                         <div className="flex items-center gap-2 text-sm">
+                           <span className="text-gray-600">タイプ:</span>
+                           <span className={`font-semibold ${user.user_type === 'photographer' ? 'text-red-600' : user.user_type === 'rider' ? 'text-blue-600' : 'text-gray-600'}`}>
+                             {user.user_type === 'photographer' ? 'フォトグラファー' : user.user_type === 'rider' ? 'ライダー' : '未設定'}
+                           </span>
+                         </div>
+                    )}
                     {user.user_type === 'photographer' && (
                       <div className="flex items-center gap-2 text-sm">
                         <span className="text-gray-600">募集状況:</span>
                         <span className={`font-semibold px-2 py-1 rounded-full text-xs ${
-                          user.is_accepting_requests 
-                            ? 'bg-green-100 text-green-700' 
-                            : 'bg-gray-100 text-gray-600'
+                          user.is_accepting_requests ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                         }`}>
                           {user.is_accepting_requests ? '募集中' : '募集停止'}
                         </span>
                       </div>
                     )}
-                    {user.average_rating && (
+                    {user.average_rating !== undefined && user.average_rating !== null && (
                       <div className="flex items-center gap-2 text-sm">
                         <span className="text-gray-600">評価:</span>
                         <span className="font-semibold text-yellow-600">
@@ -193,25 +258,26 @@ export default function Layout({ children, currentPageName }) {
             )}
           </SidebarContent>
 
-          <SidebarFooter className="border-t border-gray-200 p-4">
+          <SidebarFooter className="border-t border-gray-200 p-4 bg-gradient-to-r from-blue-50 to-white">
+            {console.log('Sidebar Footer - user:', user, 'cognitoUser:', cognitoUser, 'isLoadingUser:', isLoadingUser)}
             {user ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-3 px-2">
-                  <div className="w-10 h-10 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center">
-                    <span className="text-gray-700 font-semibold text-sm">
-                      {user.nickname?.[0] || user.full_name?.[0] || 'U'}
-                    </span>
-                  </div>
+                   <div className="w-10 h-10 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center overflow-hidden">
+                       <span className="text-gray-700 font-semibold text-sm">
+                       {user.nickname?.[0]?.toUpperCase() || user.name?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || 'U'}
+                       </span>
+                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900 text-sm truncate">
-                      {user.nickname || user.full_name}
+                      {user.nickname || user.name || user.email}
                     </p>
                     <p className="text-xs text-gray-500 truncate">{user.email}</p>
                   </div>
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors duration-200"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors duration-200"
                 >
                   <LogOut className="w-4 h-4" />
                   <span className="font-medium text-sm">ログアウト</span>
@@ -261,7 +327,6 @@ export default function Layout({ children, currentPageName }) {
         </main>
       </div>
 
-      {/* Authentication Modals */}
       <LoginModal
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
@@ -275,4 +340,3 @@ export default function Layout({ children, currentPageName }) {
     </SidebarProvider>
   );
 }
-

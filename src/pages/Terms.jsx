@@ -5,7 +5,7 @@ import { AlertTriangle, Shield, FileText, Users } from "lucide-react";
 
 export default function Terms() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white py-8">
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white py-8">
       <div className="max-w-4xl mx-auto px-4 md:px-8">
         <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8">利用規約</h1>
 

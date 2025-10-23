@@ -1,0 +1,44 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-bikematch-dev-19ffb-authRole",
+      "UnauthRoleArn": "arn:aws:iam::895843087873:role/amplify-bikematch-dev-19ffb-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::895843087873:role/amplify-bikematch-dev-19ffb-authRole",
+      "Region": "ap-northeast-1",
+      "DeploymentBucketName": "amplify-bikematch-dev-19ffb-deployment",
+      "UnauthRoleName": "amplify-bikematch-dev-19ffb-unauthRole",
+      "StackName": "amplify-bikematch-dev-19ffb",
+      "StackId": "arn:aws:cloudformation:ap-northeast-1:895843087873:stack/amplify-bikematch-dev-19ffb/589c04f0-af5b-11f0-a2db-061faaa09a3b",
+      "AmplifyAppId": "d1snnfnibksqum"
+    },
+    "categories": {
+      "auth": {
+        "bikematchdf804b56": {}
+      }
+    }
+  },
+  "devsecond": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-bikematch-devsecond-660f7-authRole",
+      "UnauthRoleArn": "arn:aws:iam::895843087873:role/amplify-bikematch-devsecond-660f7-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::895843087873:role/amplify-bikematch-devsecond-660f7-authRole",
+      "Region": "ap-northeast-1",
+      "DeploymentBucketName": "amplify-bikematch-devsecond-660f7-deployment",
+      "UnauthRoleName": "amplify-bikematch-devsecond-660f7-unauthRole",
+      "StackName": "amplify-bikematch-devsecond-660f7",
+      "StackId": "arn:aws:cloudformation:ap-northeast-1:895843087873:stack/amplify-bikematch-devsecond-660f7/52bd4a40-afaf-11f0-865f-0ed35d07c215",
+      "AmplifyAppId": "d1snnfnibksqum"
+    },
+    "categories": {
+      "auth": {
+        "bikematchdf804b56": {}
+      },
+      "api": {
+        "bikematch": {}
+      },
+      "storage": {
+        "bikematch": {}
+      }
+    }
+  }
+}

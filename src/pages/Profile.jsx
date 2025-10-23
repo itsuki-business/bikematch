@@ -1,6 +1,14 @@
-
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { useNavigate } from "react-router-dom";
+// --- Amplify v6 ---
+import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
+import { generateClient } from 'aws-amplify/api';
+import { getUrl, uploadData } from 'aws-amplify/storage';
+// import { DataStore } from '@aws-amplify/datastore';
+import { getUser, listPortfolios } from '@/graphql/queries';
+import { updateUser, createPortfolio, deletePortfolio } from '@/graphql/mutations';
+// import { User as UserModel, Portfolio as PortfolioModel } from '@/models'; // DataStoreの場合
+// ---------------
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,188 +18,563 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Upload, X, Plus, Save, Camera, AlertCircle, Link as LinkIcon } from "lucide-react";
+import { Upload, X, Plus, Save, Camera, AlertCircle, Link as LinkIcon, User } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import ImageCropper from "@/components/profile/ImageCropper"; // Assuming ImageCropper exists
+import { Skeleton } from "@/components/ui/skeleton"; // For loading state
 
+// Constants
 const PREFECTURES = [
   "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
   "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県",
-  "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県",
-  "岐阜県", "静岡県", "愛知県", "三重県",
-  "滋賀県", "京都府", "大阪府", "兵庫県", "奈良県", "和歌山県",
-  "鳥取県", "島根県", "岡山県", "広島県", "山口県",
-  "徳島県", "香川県", "愛媛県", "高知県",
-  "福岡県", "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"
+  "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県",
+  "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県",
+  "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県",
+  "徳島県", "香川県", "愛媛県", "高知県", "福岡県", "佐賀県", "長崎県",
+  "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"
 ];
 
-const GENRES = ["ツーリング", "サーキット", "ポートレート", "風景", "アクション", "スタジオ", "カスタム", "レース"];
+const GENRES = [
+  "ツーリング", "スポーツ走行", "カスタム", "レストア", "オフロード",
+  "ツーリングレポート", "イベント", "ポートレート", "風景", "アクション"
+];
 
 const SPECIAL_CONDITIONS = [
-  "遠征可能", "1日付き添い可能", "レタッチ可能", "データのみ",
-  "印刷可能", "大判印刷対応", "即日納品可能", "夜間撮影可能"
+  "ドローン撮影対応", "夜間撮影対応", "雨天撮影対応", "遠方出張対応",
+  "編集・加工サービス", "プリントサービス", "データ納品", "SNS投稿用編集"
 ];
 
 const MAX_PORTFOLIO_IMAGES = 10;
 
 export default function Profile() {
   const queryClient = useQueryClient();
-  const [user, setUser] = useState(null);
-  const [formData, setFormData] = useState({});
+  const navigate = useNavigate();
+  const [user, setUser] = useState(null); // Combined Cognito + App DB user
+  const [cognitoSub, setCognitoSub] = useState(null); // Store Cognito sub (ID)
+  const [formData, setFormData] = useState({ // Initialize with default structure
+      user_type: "",
+      nickname: "",
+      prefecture: "",
+      bike_maker: "",
+      bike_model: "",
+      shooting_genres: [],
+      price_range_min: "",
+      price_range_max: "",
+      equipment: "",
+      bio: "",
+      profile_image: "", // Store S3 key or null
+      portfolio_website: "",
+      instagram_url: "",
+      twitter_url: "",
+      youtube_url: "",
+      special_conditions: [],
+      is_accepting_requests: false
+  });
+  const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingPortfolio, setUploadingPortfolio] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState(""); // For errors
+  const [imageToCrop, setImageToCrop] = useState(null); // For cropper
+  const [profileImageUrl, setProfileImageUrl] = useState(null); // Display URL for profile image
 
+  // --- Fetch User Data ---
   useEffect(() => {
-    base44.auth.me().then(userData => {
-      setUser(userData);
-      setFormData({
-        user_type: userData.user_type || "",
-        nickname: userData.nickname || "",
-        prefecture: userData.prefecture || "",
-        bike_maker: userData.bike_maker || "",
-        bike_model: userData.bike_model || "",
-        shooting_genres: userData.shooting_genres || [],
-        price_range_min: userData.price_range_min || "",
-        price_range_max: userData.price_range_max || "",
-        equipment: userData.equipment || "",
-        bio: userData.bio || "",
-        profile_image: userData.profile_image || "",
-        portfolio_website: userData.portfolio_website || "",
-        instagram_url: userData.instagram_url || "",
-        twitter_url: userData.twitter_url || "",
-        youtube_url: userData.youtube_url || "",
-        special_conditions: userData.special_conditions || [],
-        is_accepting_requests: userData.is_accepting_requests || false
-      });
-    }).catch(() => {
-      base44.auth.redirectToLogin(window.location.href);
-    });
-  }, []);
-
-  const { data: portfolio = [] } = useQuery({
-    queryKey: ['my-portfolio', user?.id],
-    queryFn: async () => {
-      if (!user?.id) return [];
+    const fetchUserData = async () => {
+      setIsLoadingUser(true);
+      setErrorMessage(""); // Clear previous errors
       try {
-        const result = await base44.entities.Portfolio.filter({ photographer_id: user.id });
-        return result || [];
+        const cognitoUser = await getCurrentUser();
+        const attributes = await fetchUserAttributes();
+        const sub = cognitoUser.userId; // Get the unique user ID
+        setCognitoSub(sub);
+
+        // Fetch user data from App DB (GraphQL)
+        const client = generateClient();
+        const userDataResult = await client.graphql({
+          query: getUser,
+          variables: { id: sub }
+        });
+        const appUser = userDataResult.data.getUser;
+
+        if (appUser) {
+          setUser({ ...attributes, ...appUser }); // Combine Cognito attrs and DB data
+          setFormData({ // Populate form with fetched data
+             user_type: appUser.user_type || "",
+             nickname: appUser.nickname || attributes.name || "", // Fallback to Cognito name
+             prefecture: appUser.prefecture || "",
+             bike_maker: appUser.bike_maker || "",
+             bike_model: appUser.bike_model || "",
+             shooting_genres: appUser.shooting_genres || [],
+             price_range_min: appUser.price_range_min ?? "", // Use ?? for null/undefined
+             price_range_max: appUser.price_range_max ?? "",
+             equipment: appUser.equipment || "",
+             bio: appUser.bio || "",
+             profile_image: appUser.profile_image || null, // S3 Key
+             portfolio_website: appUser.portfolio_website || "",
+             instagram_url: appUser.instagram_url || "",
+             twitter_url: appUser.twitter_url || "",
+             youtube_url: appUser.youtube_url || "",
+             special_conditions: appUser.special_conditions || [],
+             is_accepting_requests: appUser.is_accepting_requests || false
+           });
+           // Fetch profile image URL if key exists
+           if (appUser.profile_image) {
+               fetchProfileImageUrl(appUser.profile_image);
+           } else {
+               setProfileImageUrl(null);
+           }
+        } else {
+          // Handle case where user exists in Cognito but not in App DB (e.g., first login after signup)
+          console.warn("User data not found in DB for Cognito user:", sub);
+          setUser({ ...attributes, id: sub }); // Use Cognito data + ID
+           setFormData({ // Populate form with Cognito data where possible
+               nickname: attributes.name || "",
+               // Reset other fields or set defaults
+               user_type: "", prefecture: "", bike_maker: "", bike_model: "",
+               shooting_genres: [], price_range_min: "", price_range_max: "",
+               equipment: "", bio: "", profile_image: null, portfolio_website: "",
+               instagram_url: "", twitter_url: "", youtube_url: "",
+               special_conditions: [], is_accepting_requests: false
+           });
+           setProfileImageUrl(null);
+          // Consider creating the user entry in the DB here
+          setErrorMessage("プロフィール情報が見つかりません。初回は情報を入力して保存してください。");
+        }
+      } catch (error) {
+        console.error('Error fetching user:', error);
+        setErrorMessage("ユーザー情報の取得に失敗しました。");
+         // Redirect to login if not authenticated
+         if (error.message === 'The user is not authenticated' || error.name === 'NotAuthorizedException') {
+             // Redirect to home page if not authenticated
+             navigate('/');
+         }
+      } finally {
+        setIsLoadingUser(false);
+      }
+    };
+
+    fetchUserData();
+  }, []); // Fetch on initial mount
+
+    // Function to get temporary URL for S3 image
+    const fetchProfileImageUrl = async (key) => {
+        if (!key) return;
+        try {
+            const url = await getUrl({ key }); // Amplify v6 Storage API
+            setProfileImageUrl(url.url.toString());
+        } catch (error) {
+            console.error("Error fetching profile image URL:", error);
+            setProfileImageUrl(null); // Reset on error
+        }
+    };
+
+
+  // --- Fetch Portfolio Data ---
+  const { data: portfolio = [], isLoading: isLoadingPortfolio } = useQuery({
+    queryKey: ['my-portfolio', cognitoSub], // Use cognitoSub as part of the key
+    queryFn: async () => {
+      if (!cognitoSub || formData.user_type !== 'photographer') return [];
+      try {
+        // --- Amplify API (GraphQL) ---
+        const client = generateClient();
+        const result = await client.graphql({
+          query: listPortfolios,
+          variables: {
+            filter: { photographer_id: { eq: cognitoSub } } // Filter by user ID
+            // limit: MAX_PORTFOLIO_IMAGES // Optional: Limit results if needed
+          }
+        });
+        return result.data?.listPortfolios?.items || [];
+        // -----------------------------
+
+        // --- DataStoreの場合 ---
+        // return await DataStore.query(PortfolioModel, p => p.photographer_id.eq(cognitoSub));
+        // --------------------
       } catch (error) {
         console.error('Portfolio fetch error:', error);
+        setErrorMessage("ポートフォリオの取得に失敗しました。");
         return [];
       }
     },
-    enabled: !!user && user.user_type === 'photographer',
-    staleTime: 0, // 常に最新データを取得
+    enabled: !!cognitoSub && formData.user_type === 'photographer', // Enable only for photographer after ID is known
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 
+  // --- Update Profile Mutation ---
   const updateProfileMutation = useMutation({
-    mutationFn: (data) => base44.auth.updateMe(data),
-    onSuccess: async (updatedUser) => {
+    mutationFn: async (profileData) => {
+      if (!cognitoSub) throw new Error("User ID not available");
+      setErrorMessage(""); // Clear previous errors
+
+      // Prepare data for GraphQL mutation (exclude fields not in schema if necessary)
+      const inputData = {
+        id: cognitoSub, // Crucial: Provide the ID for update
+        user_type: profileData.user_type || null, // Ensure null if empty
+        nickname: profileData.nickname,
+        prefecture: profileData.prefecture || null,
+        bike_maker: profileData.bike_maker || null,
+        bike_model: profileData.bike_model || null,
+        shooting_genres: profileData.shooting_genres,
+        price_range_min: profileData.price_range_min === "" ? null : parseFloat(profileData.price_range_min), // Handle empty string -> null
+        price_range_max: profileData.price_range_max === "" ? null : parseFloat(profileData.price_range_max),
+        equipment: profileData.equipment || null,
+        bio: profileData.bio || null,
+        profile_image: profileData.profile_image || null, // S3 Key
+        portfolio_website: profileData.portfolio_website || null,
+        instagram_url: profileData.instagram_url || null,
+        twitter_url: profileData.twitter_url || null,
+        youtube_url: profileData.youtube_url || null,
+        special_conditions: profileData.special_conditions,
+        is_accepting_requests: profileData.is_accepting_requests
+        // Add _version if using conflict detection with AppSync
+      };
+       // Remove null fields if your schema doesn't accept them explicitly for updates
+       // Object.keys(inputData).forEach(key => (inputData[key] === null) && delete inputData[key]);
+
+
+      console.log("Updating profile with data:", inputData);
+
+      // --- Amplify API (GraphQL) ---
+      const client = generateClient();
+      const result = await client.graphql({
+        query: updateUser,
+        variables: { input: inputData }
+      });
+      return result.data.updateUser; // Return updated user data
+      // -----------------------------
+
+      // --- DataStoreの場合 ---
+      // const original = await DataStore.query(UserModel, cognitoSub);
+      // if (!original) throw new Error("Original user data not found for update");
+      // const updatedUser = await DataStore.save(UserModel.copyOf(original, updated => {
+      //     Object.assign(updated, inputData); // Assign new data
+      // }));
+      // return updatedUser;
+      // --------------------
+    },
+    onSuccess: (updatedUserData) => {
       setSuccessMessage("プロフィールを更新しました");
-      // 即座にユーザー情報を更新
-      setUser(updatedUser);
-      // クエリを無効化して再取得
-      await queryClient.invalidateQueries(['user']);
-      await queryClient.invalidateQueries(['my-portfolio']);
-      await queryClient.invalidateQueries(['photographers']);
-      // サイドバー更新のため、短い遅延後にリロード
+      // Update local state immediately for better UX
+      setUser(prev => ({ ...prev, ...updatedUserData }));
+      setFormData(prev => ({ ...prev, ...updatedUserData })); // Update form too in case some fields were transformed
+      // If profile image key changed, refetch URL
+      if (formData.profile_image !== updatedUserData.profile_image) {
+          fetchProfileImageUrl(updatedUserData.profile_image);
+      }
+      // Invalidate queries to ensure consistency, especially if Layout uses separate query
+      queryClient.invalidateQueries({ queryKey: ['user', cognitoSub] }); // Invalidate specific user query
+      queryClient.invalidateQueries({ queryKey: ['photographers'] }); // Invalidate list if displayed elsewhere
+
+      // Delay reload slightly to allow state updates and message visibility
       setTimeout(() => {
-        window.location.reload();
-      }, 500);
+        setSuccessMessage(""); // Clear message after a delay
+        // window.location.reload(); // Reload might not be necessary if state updates handle UI correctly
+      }, 2000); // Show success for 2 seconds
     },
+     onError: (error) => {
+         console.error("Profile update failed:", error);
+         setErrorMessage(`プロフィールの更新に失敗しました: ${error.message || '不明なエラー'}`);
+     }
   });
 
+  // --- Add Portfolio Mutation ---
   const addPortfolioMutation = useMutation({
-    mutationFn: (data) => base44.entities.Portfolio.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries(['my-portfolio']);
+    mutationFn: async (portfolioData) => {
+      if (!cognitoSub) throw new Error("User ID not available");
+      setErrorMessage("");
+
+      const inputData = {
+        photographer_id: cognitoSub, // Link to the user
+        image_key: portfolioData.image_key, // S3 Key
+        // title: portfolioData.title || "", // Add fields if your schema has them
+        // description: portfolioData.description || "",
+        // You might want owner field automatically handled by AppSync/DataStore auth rules
+      };
+      console.log("Adding portfolio:", inputData);
+
+      // --- Amplify API (GraphQL) ---
+      const client = generateClient();
+      const result = await client.graphql({
+        query: createPortfolio,
+        variables: { input: inputData }
+      });
+      return result.data.createPortfolio;
+      // -----------------------------
+
+       // --- DataStoreの場合 ---
+       // const newPortfolio = await DataStore.save(new PortfolioModel(inputData));
+       // return newPortfolio;
+       // --------------------
     },
+    onSuccess: (newPortfolioItem) => {
+      // Invalidate portfolio query to refetch
+      queryClient.invalidateQueries({ queryKey: ['my-portfolio', cognitoSub] });
+       setSuccessMessage("ポートフォリオ画像を追加しました。");
+       setTimeout(() => setSuccessMessage(""), 2000);
+    },
+    onError: (error) => {
+        console.error("Add portfolio failed:", error);
+        setErrorMessage(`ポートフォリオの追加に失敗しました: ${error.message || '不明なエラー'}`);
+    }
   });
 
+  // --- Delete Portfolio Mutation ---
   const deletePortfolioMutation = useMutation({
-    mutationFn: (id) => base44.entities.Portfolio.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries(['my-portfolio']);
+    mutationFn: async (portfolioId) => {
+       setErrorMessage("");
+       console.log("Deleting portfolio:", portfolioId);
+       // --- Amplify API (GraphQL) ---
+       // You need the item's ID and potentially its _version for deletion
+       const itemToDelete = portfolio.find(item => item.id === portfolioId);
+       if (!itemToDelete) throw new Error("Portfolio item not found");
+
+       const inputData = {
+           id: portfolioId,
+           // _version: itemToDelete._version // Include if using conflict detection
+       };
+       const client = generateClient();
+       const result = await client.graphql({
+         query: deletePortfolio,
+         variables: { input: inputData }
+       });
+       // Optionally delete the S3 object associated with itemToDelete.image_key here
+       // try { await Storage.remove(itemToDelete.image_key); } catch (e) { console.warn("S3 delete failed", e); }
+       return result.data.deletePortfolio;
+       // -----------------------------
+
+       // --- DataStoreの場合 ---
+       // const itemToDelete = await DataStore.query(PortfolioModel, portfolioId);
+       // if (itemToDelete) {
+       //    await DataStore.delete(itemToDelete);
+       //    // Optionally delete S3 object
+       //    // try { await Storage.remove(itemToDelete.image_key); } catch (e) { console.warn("S3 delete failed", e); }
+       //    return { id: portfolioId }; // Return something to indicate success
+       // } else {
+       //    throw new Error("Portfolio item not found in DataStore");
+       // }
+       // --------------------
     },
+    onSuccess: (deletedItem) => {
+        console.log("Deleted portfolio:", deletedItem?.id);
+        // Invalidate portfolio query to refetch
+        queryClient.invalidateQueries({ queryKey: ['my-portfolio', cognitoSub] });
+        setSuccessMessage("ポートフォリオ画像を削除しました。");
+        setTimeout(() => setSuccessMessage(""), 2000);
+    },
+    onError: (error) => {
+        console.error("Delete portfolio failed:", error);
+        setErrorMessage(`ポートフォリオの削除に失敗しました: ${error.message || '不明なエラー'}`);
+    }
   });
 
-  const handleImageUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  // --- Event Handlers ---
 
-    setUploadingImage(true);
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
-    setFormData({ ...formData, profile_image: file_url });
-    setUploadingImage(false);
+  // Trigger file input for profile image
+  const triggerProfileImageUpload = () => {
+      document.getElementById('profile-image-upload')?.click();
   };
 
+  // Handle profile image selection (opens cropper)
+  const handleProfileImageSelect = (e) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              setImageToCrop(reader.result); // Pass Data URL to cropper
+          };
+          reader.readAsDataURL(file);
+      }
+      e.target.value = ''; // Reset file input
+  };
+
+  // Handle crop completion
+  const handleCropComplete = async (blob) => {
+      if (!blob || !cognitoSub) return;
+      setImageToCrop(null); // Close cropper
+      setUploadingImage(true);
+      setErrorMessage("");
+      setSuccessMessage("");
+      try {
+          // Generate a unique key for S3
+          const fileExtension = blob.type.split('/')[1] || 'jpg';
+          const fileName = `profile-images/${cognitoSub}-profile.${fileExtension}`; // Consistent name for easier retrieval/overwrite
+
+          // --- Amplify Storage ---
+          const result = await uploadData({
+            key: fileName,
+            data: blob,
+            options: {
+              contentType: blob.type,
+              // level: 'protected', // Consider access level 'protected' or 'private' if needed
+            }
+          }).result;
+          console.log("Profile image uploaded:", result);
+          // --------------------
+
+          // Update form data with the S3 key
+          setFormData({ ...formData, profile_image: result.key });
+          // Fetch and display the new image immediately
+          fetchProfileImageUrl(result.key);
+          setSuccessMessage("プロフィール画像を更新しました。変更を保存してください。");
+
+      } catch (error) {
+          console.error("Error uploading cropped image:", error);
+          setErrorMessage("プロフィール画像のアップロードに失敗しました。");
+      } finally {
+          setUploadingImage(false);
+      }
+  };
+
+
   const handlePortfolioUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const file = e.target.files?.[0];
+    if (!file || !cognitoSub) return;
 
     if (portfolio.length >= MAX_PORTFOLIO_IMAGES) {
       alert(`ポートフォリオは最大${MAX_PORTFOLIO_IMAGES}枚までです`);
       return;
     }
 
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
-    addPortfolioMutation.mutate({
-      photographer_id: user.id,
-      image_url: file_url,
-      title: "",
-      description: ""
-    });
+    setUploadingPortfolio(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+        const timestamp = Date.now();
+        const fileName = `portfolio/${cognitoSub}/${timestamp}-${file.name}`; // Unique key
+
+        // --- Amplify Storage ---
+        const result = await uploadData({
+          key: fileName,
+          data: file,
+          options: {
+            contentType: file.type,
+            // level: 'public' // Portfolio images are likely public
+          }
+        }).result;
+        console.log("Portfolio image uploaded:", result);
+        // --------------------
+
+        // Add to portfolio DB via mutation
+        addPortfolioMutation.mutate({ image_key: result.key });
+
+    } catch (error) {
+        console.error("Error uploading portfolio image:", error);
+        setErrorMessage("ポートフォリオ画像のアップロードに失敗しました。");
+    } finally {
+        setUploadingPortfolio(false);
+        e.target.value = ''; // Reset file input
+    }
   };
 
+  // Toggle handlers remain the same
   const handleGenreToggle = (genre) => {
-    const newGenres = formData.shooting_genres.includes(genre)
-      ? formData.shooting_genres.filter(g => g !== genre)
-      : [...formData.shooting_genres, genre];
-    setFormData({ ...formData, shooting_genres: newGenres });
+    setFormData(prev => ({
+        ...prev,
+        shooting_genres: prev.shooting_genres.includes(genre)
+            ? prev.shooting_genres.filter(g => g !== genre)
+            : [...prev.shooting_genres, genre]
+    }));
   };
-
   const handleConditionToggle = (condition) => {
-    const newConditions = formData.special_conditions.includes(condition)
-      ? formData.special_conditions.filter(c => c !== condition)
-      : [...formData.special_conditions, condition];
-    setFormData({ ...formData, special_conditions: newConditions });
+     setFormData(prev => ({
+        ...prev,
+        special_conditions: prev.special_conditions.includes(condition)
+            ? prev.special_conditions.filter(c => c !== condition)
+            : [...prev.special_conditions, condition]
+    }));
   };
 
+  // Form submission handler
   const handleSubmit = (e) => {
     e.preventDefault();
+    setSuccessMessage(""); // Clear message before submitting
+    setErrorMessage("");
+    // Basic validation (can be enhanced with Zod etc.)
+    if (!formData.user_type) {
+        setErrorMessage("ユーザータイプを選択してください。");
+        return;
+    }
+    if (!formData.nickname?.trim()) {
+        setErrorMessage("ニックネームを入力してください。");
+        return;
+    }
+     if (!formData.prefecture) {
+         setErrorMessage("都道府県を選択してください。");
+         return;
+     }
     updateProfileMutation.mutate(formData);
   };
 
-  if (!user) return null;
+  // --- Render Logic ---
+
+  if (isLoadingUser) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 md:px-8 py-8 space-y-6">
+         {/* More detailed skeleton */}
+         <Skeleton className="h-10 w-1/3 mb-4" />
+         <Card><CardHeader><Skeleton className="h-6 w-1/4" /></CardHeader><CardContent className="space-y-4"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /><Skeleton className="h-20 w-full" /></CardContent></Card>
+         <Card><CardHeader><Skeleton className="h-6 w-1/4" /></CardHeader><CardContent className="space-y-4"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></CardContent></Card>
+         <Skeleton className="h-12 w-full" />
+      </div>
+    );
+  }
+
+   if (!user && !isLoadingUser) { // Only show error if not loading and no user
+       return (
+           <div className="max-w-4xl mx-auto px-4 md:px-8 py-8">
+               <div className="text-center">
+                   <p className="text-red-600 mb-4">ユーザー情報の読み込みに失敗しました。</p>
+                   <button 
+                       onClick={() => navigate('/')}
+                       className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                   >
+                       ホームに戻る
+                   </button>
+               </div>
+           </div>
+       );
+   }
+
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white py-8">
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white py-8">
       <div className="max-w-4xl mx-auto px-4 md:px-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-8">プロフィール編集</h1>
 
+        {/* Success and Error Messages */}
         {successMessage && (
-          <Alert className="mb-6 bg-green-50 border-green-200">
-            <AlertDescription className="text-green-800">{successMessage}</AlertDescription>
+          <Alert className="mb-6 bg-green-50 border-green-200 text-green-800">
+             <AlertCircle className="h-4 w-4" /> {/* Or CheckCircle */}
+            <AlertDescription>{successMessage}</AlertDescription>
+          </Alert>
+        )}
+         {errorMessage && (
+          <Alert variant="destructive" className="mb-6 bg-red-50 border-red-200 text-red-800">
+             <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         )}
 
+
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* 基本情報カード */}
           <Card className="shadow-lg border-none">
             <CardHeader>
               <CardTitle>基本情報</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* User Type Select */}
               <div>
-                <Label>ユーザータイプ *</Label>
+                <Label htmlFor="userType">ユーザータイプ *</Label>
                 <Select
+                  name="userType"
                   value={formData.user_type || ""}
-                  onValueChange={(value) => {
-                    // ユーザータイプ変更時に即座にformDataを更新
-                    setFormData({ ...formData, user_type: value });
-                    // userステートも更新してリアルタイム反映
-                    setUser({ ...user, user_type: value });
-                  }}
+                  onValueChange={(value) => setFormData({ ...formData, user_type: value })}
+                  required
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="userType">
                     <SelectValue placeholder="選択してください" />
                   </SelectTrigger>
                   <SelectContent>
@@ -199,31 +582,35 @@ export default function Profile() {
                     <SelectItem value="photographer">フォトグラファー（撮影する側）</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-gray-500 mt-2">
-                  {formData.user_type === 'rider'
-                    ? '※ ライダーはフォトグラファーを探して撮影を依頼できます'
-                    : formData.user_type === 'photographer'
-                    ? '※ フォトグラファーはライダーからの依頼を受けることができます'
+                 <p className="text-xs text-gray-500 mt-2">
+                   {formData.user_type === 'rider' ? '※ ライダーはフォトグラファーを探して撮影を依頼できます'
+                    : formData.user_type === 'photographer' ? '※ フォトグラファーはライダーからの依頼を受けることができます'
                     : '※ ユーザータイプを選択してください'}
-                </p>
+                 </p>
               </div>
 
+              {/* Nickname Input */}
               <div>
-                <Label>ニックネーム *</Label>
+                <Label htmlFor="nickname">ニックネーム *</Label>
                 <Input
+                  id="nickname"
                   value={formData.nickname}
                   onChange={(e) => setFormData({ ...formData, nickname: e.target.value })}
                   placeholder="ニックネームを入力"
+                  required
                 />
               </div>
 
+               {/* Prefecture Select */}
               <div>
-                <Label>都道府県 *</Label>
+                <Label htmlFor="prefecture">都道府県 *</Label>
                 <Select
-                  value={formData.prefecture}
+                  name="prefecture"
+                  value={formData.prefecture || ""}
                   onValueChange={(value) => setFormData({ ...formData, prefecture: value })}
+                  required
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="prefecture">
                     <SelectValue placeholder="選択してください" />
                   </SelectTrigger>
                   <SelectContent>
@@ -234,115 +621,157 @@ export default function Profile() {
                 </Select>
               </div>
 
-              <div>
-                <Label>プロフィール画像</Label>
-                <div className="mt-2">
-                  {formData.profile_image ? (
-                    <div className="relative w-32 h-32">
-                      <img
-                        src={formData.profile_image}
-                        alt="Profile"
-                        className="w-full h-full object-cover rounded-lg border-4 border-gray-200"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setFormData({ ...formData, profile_image: "" })}
-                        className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1.5 shadow-lg hover:bg-red-700 transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <label className="flex flex-col items-center justify-center w-32 h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-red-500 transition-colors bg-gray-50">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                        className="hidden"
-                        disabled={uploadingImage}
-                      />
-                      {uploadingImage ? (
-                        <div className="text-gray-400 text-sm">アップロード中...</div>
-                      ) : (
-                        <>
-                          <Upload className="w-8 h-8 text-gray-400 mb-1" />
-                          <span className="text-xs text-gray-500">画像を選択</span>
-                        </>
-                      )}
-                    </label>
-                  )}
-                </div>
-              </div>
+               {/* Profile Image Upload */}
+               <div>
+                 <Label>プロフィール画像</Label>
+                 <div className="mt-2 flex items-center gap-4">
+                   {/* Image Preview */}
+                   <div className="relative w-24 h-24 flex-shrink-0"> {/* Adjusted size */}
+                     {profileImageUrl ? (
+                       <img
+                         src={profileImageUrl}
+                         alt="Profile Preview"
+                         className="w-full h-full object-cover rounded-full border-2 border-gray-200" // rounded-full
+                       />
+                     ) : (
+                       <div className="w-full h-full bg-gray-200 rounded-full flex items-center justify-center text-gray-500">
+                         <User className="w-10 h-10" />
+                       </div>
+                     )}
+                     {uploadingImage && ( // Show overlay while uploading
+                         <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                             <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-white"></div>
+                         </div>
+                     )}
+                   </div>
+                   {/* Upload/Remove Buttons */}
+                   <div className="space-y-2">
+                       <Button
+                           type="button"
+                           variant="outline"
+                           onClick={triggerProfileImageUpload}
+                           disabled={uploadingImage}
+                       >
+                           <Upload className="w-4 h-4 mr-2" />
+                           画像を変更
+                       </Button>
+                       {formData.profile_image && ( // Show remove button only if image exists
+                           <Button
+                           type="button"
+                           variant="ghost"
+                           size="sm"
+                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                           onClick={() => {
+                               setFormData({ ...formData, profile_image: null });
+                               setProfileImageUrl(null); // Clear preview
+                               // Optionally add Storage.remove(formData.profile_image) in mutation or here
+                           }}
+                           disabled={uploadingImage}
+                           >
+                           <X className="w-4 h-4 mr-1" />
+                           削除
+                           </Button>
+                       )}
+                   </div>
+                   {/* Hidden file input */}
+                   <input
+                       id="profile-image-upload"
+                       type="file"
+                       accept="image/jpeg, image/png, image/webp, image/gif" // Specify accepted types
+                       onChange={handleProfileImageSelect}
+                       className="hidden"
+                       disabled={uploadingImage}
+                   />
+                 </div>
+               </div>
 
+              {/* Bio Textarea */}
               <div>
-                <Label>自己紹介</Label>
+                <Label htmlFor="bio">自己紹介</Label>
                 <Textarea
+                  id="bio"
                   value={formData.bio}
                   onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                  placeholder="自己紹介を入力"
-                  rows={4}
-                  spellCheck={false}
+                  placeholder="自己紹介、活動内容、撮影スタイルなどを入力..."
+                  rows={5} // Increased rows
+                  maxLength={500} // Example max length
+                  className="mt-1"
                 />
+                 <p className="text-xs text-gray-500 mt-1 text-right">{formData.bio?.length || 0} / 500 文字</p>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="shadow-lg border-none">
-            <CardHeader>
-              <CardTitle>SNSアカウント</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div>
-                <Label className="flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
-                  </svg>
-                  Instagram URL
-                </Label>
-                <Input
-                  type="url"
-                  value={formData.instagram_url}
-                  onChange={(e) => setFormData({ ...formData, instagram_url: e.target.value })}
-                  placeholder="https://instagram.com/username"
-                />
-              </div>
+           {/* SNSアカウント カード */}
+           <Card className="shadow-lg border-none">
+             <CardHeader>
+               <CardTitle>SNS・Webサイト</CardTitle>
+             </CardHeader>
+             <CardContent className="space-y-4">
+               {/* Instagram */}
+               <div className="flex items-center gap-3">
+                 <Label htmlFor="instagram_url" className="w-24 flex-shrink-0 flex items-center gap-1.5">
+                    <svg className="w-4 h-4 text-pink-600" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07s-3.584-.012-4.849-.07c-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849C2.013 4.877 3.528 3.322 6.78 3.174c1.266-.057 1.645-.069 4.849-.069zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                   Instagram
+                 </Label>
+                 <Input
+                   id="instagram_url" type="url"
+                   value={formData.instagram_url}
+                   onChange={(e) => setFormData({ ...formData, instagram_url: e.target.value })}
+                   placeholder="https://instagram.com/..."
+                   className="flex-grow"
+                 />
+               </div>
+               {/* X (Twitter) */}
+               <div className="flex items-center gap-3">
+                 <Label htmlFor="twitter_url" className="w-24 flex-shrink-0 flex items-center gap-1.5">
+                   <svg className="w-4 h-4 text-gray-800" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                   X
+                 </Label>
+                 <Input
+                   id="twitter_url" type="url"
+                   value={formData.twitter_url}
+                   onChange={(e) => setFormData({ ...formData, twitter_url: e.target.value })}
+                   placeholder="https://x.com/..."
+                   className="flex-grow"
+                 />
+               </div>
+               {/* YouTube */}
+               <div className="flex items-center gap-3">
+                 <Label htmlFor="youtube_url" className="w-24 flex-shrink-0 flex items-center gap-1.5">
+                   <svg className="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                   YouTube
+                 </Label>
+                 <Input
+                   id="youtube_url" type="url"
+                   value={formData.youtube_url}
+                   onChange={(e) => setFormData({ ...formData, youtube_url: e.target.value })}
+                   placeholder="https://youtube.com/..."
+                   className="flex-grow"
+                 />
+               </div>
+                {/* Portfolio Website */}
+               <div className="flex items-center gap-3">
+                 <Label htmlFor="portfolio_website" className="w-24 flex-shrink-0 flex items-center gap-1.5">
+                   <LinkIcon className="w-4 h-4 text-blue-600" />
+                   Webサイト
+                 </Label>
+                 <Input
+                   id="portfolio_website" type="url"
+                   value={formData.portfolio_website}
+                   onChange={(e) => setFormData({ ...formData, portfolio_website: e.target.value })}
+                   placeholder="https://example.com"
+                   className="flex-grow"
+                 />
+               </div>
+               <p className="text-xs text-gray-500 pt-2">
+                 ※ プロフィールページにリンクが表示されます。
+               </p>
+             </CardContent>
+           </Card>
 
-              <div>
-                <Label className="flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                  </svg>
-                  X URL
-                </Label>
-                <Input
-                  type="url"
-                  value={formData.twitter_url}
-                  onChange={(e) => setFormData({ ...formData, twitter_url: e.target.value })}
-                  placeholder="https://x.com/username"
-                />
-              </div>
 
-              <div>
-                <Label className="flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                  </svg>
-                  YouTube URL
-                </Label>
-                <Input
-                  type="url"
-                  value={formData.youtube_url}
-                  onChange={(e) => setFormData({ ...formData, youtube_url: e.target.value })}
-                  placeholder="https://youtube.com/@username"
-                />
-              </div>
-
-              <p className="text-xs text-gray-500">
-                ※ SNSアカウントを設定すると、プロフィールページに表示されます
-              </p>
-            </CardContent>
-          </Card>
-
+          {/* Rider Specific Fields */}
           {formData.user_type === 'rider' && (
             <Card className="shadow-lg border-none">
               <CardHeader>
@@ -350,106 +779,112 @@ export default function Profile() {
               </CardHeader>
               <CardContent className="space-y-6">
                 <div>
-                  <Label>バイクメーカー</Label>
+                  <Label htmlFor="bikeMaker">バイクメーカー</Label>
                   <Input
+                    id="bikeMaker"
                     value={formData.bike_maker}
                     onChange={(e) => setFormData({ ...formData, bike_maker: e.target.value })}
                     placeholder="例: Honda, Yamaha"
                   />
                 </div>
-
                 <div>
-                  <Label>バイクモデル</Label>
+                  <Label htmlFor="bikeModel">バイクモデル</Label>
                   <Input
+                    id="bikeModel"
                     value={formData.bike_model}
                     onChange={(e) => setFormData({ ...formData, bike_model: e.target.value })}
                     placeholder="例: CBR1000RR, YZF-R1"
                   />
                 </div>
-
-                <div>
-                  <Label>希望する撮影ジャンル</Label>
-                  <div className="flex flex-wrap gap-3 mt-2">
-                    {GENRES.map((genre) => (
-                      <Badge
-                        key={genre}
-                        onClick={() => handleGenreToggle(genre)}
-                        className={`cursor-pointer px-4 py-2 text-sm ${
-                          formData.shooting_genres.includes(genre)
-                            ? "bg-red-600 text-white hover:bg-red-700"
-                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                        }`}
-                      >
-                        {genre}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
+                 {/* 希望ジャンル (Optional for Rider) */}
+                 {/* <div>
+                   <Label>希望する撮影ジャンル (任意)</Label>
+                   <div className="flex flex-wrap gap-2 mt-2">
+                     {GENRES.map((genre) => (
+                       <Badge
+                         key={`rider-${genre}`}
+                         onClick={() => handleGenreToggle(genre)}
+                         variant={formData.shooting_genres.includes(genre) ? "default" : "outline"}
+                         className={`cursor-pointer px-3 py-1 text-sm transition-all ${
+                             formData.shooting_genres.includes(genre) ? "bg-red-600 border-red-600 text-white hover:bg-red-700" : ""
+                         }`}
+                       >
+                         {genre}
+                       </Badge>
+                     ))}
+                   </div>
+                 </div> */}
               </CardContent>
             </Card>
           )}
 
+          {/* Photographer Specific Fields */}
           {formData.user_type === 'photographer' && (
             <>
+              {/* フォトグラファー情報カード (募集状況、料金) */}
               <Card className="shadow-lg border-none">
                 <CardHeader>
-                  <CardTitle>フォトグラファー情報</CardTitle>
+                  <CardTitle>フォトグラファー設定</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="flex items-center space-x-2 p-4 bg-green-50 border border-green-200 rounded-lg">
+                   {/* Accepting Requests Checkbox */}
+                  <div className="flex items-center space-x-2 p-4 bg-gray-50 border border-gray-200 rounded-lg">
                     <Checkbox
                       id="accepting-requests"
                       checked={formData.is_accepting_requests}
-                      onCheckedChange={(checked) => setFormData({ ...formData, is_accepting_requests: checked })}
+                      onCheckedChange={(checked) => setFormData({ ...formData, is_accepting_requests: !!checked })} // Ensure boolean
                     />
                     <Label htmlFor="accepting-requests" className="text-sm font-medium cursor-pointer">
                       現在撮影依頼を募集する
                     </Label>
                   </div>
-                  <p className="text-xs text-gray-600 -mt-2">
-                    ※ チェックを入れると、ライダーからの撮影依頼を受け付けることができます。チェックを外すと検索結果に表示されません。
+                  <p className="text-xs text-gray-600 -mt-4"> {/* Negative margin */}
+                    ※ チェックを入れると、あなたのプロフィールが検索結果に表示され、ライダーからの依頼を受け付けられるようになります。
                   </p>
 
+                  {/* Price Range */}
                   <div className="grid md:grid-cols-2 gap-6">
                     <div>
-                      <Label>料金目安（最小）</Label>
+                      <Label htmlFor="priceMin">料金目安（最小）</Label>
                       <Input
-                        type="number"
+                        id="priceMin" type="number" min="0" step="1000" // Add min/step
                         value={formData.price_range_min}
-                        onChange={(e) => setFormData({ ...formData, price_range_min: parseFloat(e.target.value) })}
+                        onChange={(e) => setFormData({ ...formData, price_range_min: e.target.value === '' ? '' : parseFloat(e.target.value) })}
                         placeholder="¥ 10,000"
+                        className="mt-1"
                       />
                     </div>
-
                     <div>
-                      <Label>料金目安（最大）</Label>
+                      <Label htmlFor="priceMax">料金目安（最大）</Label>
                       <Input
-                        type="number"
+                        id="priceMax" type="number" min="0" step="1000"
                         value={formData.price_range_max}
-                        onChange={(e) => setFormData({ ...formData, price_range_max: parseFloat(e.target.value) })}
+                        onChange={(e) => setFormData({ ...formData, price_range_max: e.target.value === '' ? '' : parseFloat(e.target.value) })}
                         placeholder="¥ 50,000"
+                        className="mt-1"
                       />
                     </div>
                   </div>
+                   <p className="text-xs text-gray-500">※ 省略可。目安として表示されます。実際の料金は依頼内容に応じて相談してください。</p>
 
+                  {/* Equipment */}
                   <div>
-                    <Label className="flex items-center gap-2">
-                      <LinkIcon className="w-4 h-4" />
-                      ポートフォリオサイトURL
-                    </Label>
-                    <Input
-                      type="url"
-                      value={formData.portfolio_website}
-                      onChange={(e) => setFormData({ ...formData, portfolio_website: e.target.value })}
-                      placeholder="https://example.com"
+                    <Label htmlFor="equipment">使用機材</Label>
+                    <Textarea
+                        id="equipment"
+                        value={formData.equipment}
+                        onChange={(e) => setFormData({ ...formData, equipment: e.target.value })}
+                        placeholder="カメラ、レンズ、ドローンなど..."
+                        rows={3}
+                        maxLength={300}
+                        className="mt-1"
                     />
-                    <p className="text-xs text-gray-500 mt-2">
-                      ※ 外部のポートフォリオサイトやSNSのリンクを設定できます
-                    </p>
+                     <p className="text-xs text-gray-500 mt-1 text-right">{formData.equipment?.length || 0} / 300 文字</p>
                   </div>
                 </CardContent>
               </Card>
 
+              {/* ポートフォリオカード */}
               <Card className="shadow-lg border-none">
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
@@ -458,118 +893,164 @@ export default function Profile() {
                       ポートフォリオ画像
                     </div>
                     <Badge variant="outline" className="text-sm">
-                      {portfolio?.length || 0} / {MAX_PORTFOLIO_IMAGES}枚
+                      {portfolio.length} / {MAX_PORTFOLIO_IMAGES}枚
                     </Badge>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {portfolio?.length >= MAX_PORTFOLIO_IMAGES && (
-                    <Alert className="mb-4 bg-yellow-50 border-yellow-200">
-                      <AlertCircle className="h-4 w-4 text-yellow-600" />
-                      <AlertDescription className="text-yellow-800">
-                        ポートフォリオは最大{MAX_PORTFOLIO_IMAGES}枚までです。追加する場合は既存の画像を削除してください。
+                  {portfolio.length >= MAX_PORTFOLIO_IMAGES && !isLoadingPortfolio && (
+                    <Alert variant="destructive" className="mb-4 bg-yellow-50 border-yellow-200 text-yellow-800">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        ポートフォリオは最大{MAX_PORTFOLIO_IMAGES}枚です。追加するには既存の画像を削除してください。
                       </AlertDescription>
                     </Alert>
                   )}
 
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
-                    {portfolio?.map((item) => (
-                      <div key={item.id} className="relative group">
-                        <img
-                          src={item.image_url}
-                          alt={item.title}
-                          className="w-full aspect-square object-cover rounded-lg"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => deletePortfolioMutation.mutate(item.id)}
-                          className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
+                  {isLoadingPortfolio ? (
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                          {[...Array(3)].map((_, i) => <Skeleton key={`skel-port-${i}`} className="w-full aspect-square rounded-lg" />)}
                       </div>
-                    ))}
-                    {portfolio?.length < MAX_PORTFOLIO_IMAGES && (
-                      <label className="flex items-center justify-center aspect-square border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-red-500 transition-colors bg-gray-50">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handlePortfolioUpload}
-                          className="hidden"
-                        />
-                        <div className="flex flex-col items-center">
-                          <Plus className="w-8 h-8 text-gray-400 mb-1" />
-                          <span className="text-xs text-gray-500">画像を追加</span>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                      {portfolio.map((item) => (
+                        <div key={item.id} className="relative group aspect-square"> {/* Ensure aspect ratio */}
+                          {item.image_key && ( // Display image only if key exists
+                              <img
+                              // Use Storage.get to fetch URL - ideally use state managed URLs
+                              // For simplicity here, assuming a way to get URL or handle keys directly
+                              src={item.imageUrl || `https://via.placeholder.com/150?text=Loading...`} // Placeholder while URL loads
+                              alt={item.title || "ポートフォリオ画像"}
+                              className="w-full h-full object-cover rounded-lg bg-gray-100" // Add bg for loading
+                              // onLoad={(e) => { /* Handle loaded state if needed */ }}
+                              onError={(e) => { e.target.src = 'https://via.placeholder.com/150?text=Error'; }} // Simple error placeholder
+                              />
+                          )}
+                           {/* Add loading state for Storage.get if needed */}
+                           {/* {!item.imageUrl && <Skeleton className="absolute inset-0 rounded-lg" />} */}
+
+                          <button
+                            type="button"
+                            onClick={() => !deletePortfolioMutation.isPending && deletePortfolioMutation.mutate(item.id)}
+                            disabled={deletePortfolioMutation.isPending && deletePortfolioMutation.variables === item.id} // Disable only the specific button being deleted
+                            className={`absolute top-1.5 right-1.5 bg-black/50 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed`}
+                            aria-label="画像を削除"
+                          >
+                             {deletePortfolioMutation.isPending && deletePortfolioMutation.variables === item.id ? (
+                                <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                             ) : (
+                                <X className="w-4 h-4" />
+                             )}
+                          </button>
                         </div>
-                      </label>
-                    )}
-                  </div>
+                      ))}
+                      {/* Upload Slot */}
+                      {portfolio.length < MAX_PORTFOLIO_IMAGES && (
+                        <label className={`flex items-center justify-center aspect-square border-2 border-dashed rounded-lg transition-colors bg-gray-50 ${uploadingPortfolio ? 'cursor-not-allowed opacity-50 border-gray-300' : 'cursor-pointer border-gray-300 hover:border-red-500'}`}>
+                          <input
+                            type="file"
+                            accept="image/jpeg, image/png, image/webp, image/gif"
+                            onChange={handlePortfolioUpload}
+                            className="hidden"
+                            disabled={uploadingPortfolio}
+                          />
+                          <div className="flex flex-col items-center text-center">
+                            {uploadingPortfolio ? (
+                                <>
+                                 <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-gray-400 mb-1"></div>
+                                 <span className="text-xs text-gray-500">アップロード中</span>
+                                </>
+                            ) : (
+                                <>
+                                  <Plus className="w-8 h-8 text-gray-400 mb-1" />
+                                  <span className="text-xs text-gray-500 px-2">画像を追加</span>
+                                </>
+                            )}
+                          </div>
+                        </label>
+                      )}
+                    </div>
+                  )}
                   <p className="text-xs text-gray-500">
-                    ※ ポートフォリオ画像は検索結果やプロフィールで表示されます
+                    ※ クリックして画像を追加・削除できます。最大{MAX_PORTFOLIO_IMAGES}枚まで。
                   </p>
                 </CardContent>
               </Card>
 
+               {/* こだわり条件カード */}
               <Card className="shadow-lg border-none">
                 <CardHeader>
-                  <CardTitle>こだわり条件</CardTitle>
+                  <CardTitle>こだわり条件・対応可能サービス</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex flex-wrap gap-3">
+                  <div className="flex flex-wrap gap-2"> {/* Reduced gap */}
                     {SPECIAL_CONDITIONS.map((condition) => (
                       <Badge
                         key={condition}
                         onClick={() => handleConditionToggle(condition)}
-                        className={`cursor-pointer px-4 py-2 text-sm ${
-                          formData.special_conditions.includes(condition)
-                            ? "bg-blue-600 text-white hover:bg-blue-700"
-                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                        }`}
+                         variant={formData.special_conditions.includes(condition) ? "default" : "outline"}
+                         className={`cursor-pointer px-3 py-1.5 text-sm transition-all rounded-full ${ // rounded-full
+                             formData.special_conditions.includes(condition) ? "bg-blue-600 border-blue-600 text-white hover:bg-blue-700" : "bg-white border-gray-300 text-gray-700 hover:bg-gray-100"
+                         }`}
                       >
                         {condition}
                       </Badge>
                     ))}
                   </div>
                   <p className="text-xs text-gray-500 mt-4">
-                    ※ 提供可能なサービスや対応可能な条件を選択してください
+                    ※ 提供可能なサービスや対応可能な条件を選択してください (複数選択可)。
                   </p>
                 </CardContent>
               </Card>
 
+              {/* 得意ジャンルカード */}
               <Card className="shadow-lg border-none">
                 <CardHeader>
                   <CardTitle>得意な撮影ジャンル</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex flex-wrap gap-3">
+                  <div className="flex flex-wrap gap-2"> {/* Reduced gap */}
                     {GENRES.map((genre) => (
                       <Badge
                         key={genre}
                         onClick={() => handleGenreToggle(genre)}
-                        className={`cursor-pointer px-4 py-2 text-sm ${
-                          formData.shooting_genres.includes(genre)
-                            ? "bg-red-600 text-white hover:bg-red-700"
-                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                        }`}
+                        variant={formData.shooting_genres.includes(genre) ? "default" : "outline"}
+                         className={`cursor-pointer px-3 py-1.5 text-sm transition-all rounded-full ${ // rounded-full
+                             formData.shooting_genres.includes(genre) ? "bg-red-600 border-red-600 text-white hover:bg-red-700" : "bg-white border-gray-300 text-gray-700 hover:bg-gray-100"
+                         }`}
                       >
                         {genre}
                       </Badge>
                     ))}
                   </div>
+                   <p className="text-xs text-gray-500 mt-4">
+                     ※ 得意な撮影ジャンルを選択してください (複数選択可)。
+                   </p>
                 </CardContent>
               </Card>
             </>
           )}
 
+          {/* Save Button */}
           <Button
             type="submit"
-            className="w-full bg-red-600 hover:bg-red-700 text-white py-6 text-lg"
-            disabled={updateProfileMutation.isPending}
+            className="w-full bg-red-600 hover:bg-red-700 text-white py-3 text-lg font-semibold mt-8" // Adjusted padding/margin
+            disabled={updateProfileMutation.isPending || uploadingImage || uploadingPortfolio} // Disable while saving or uploading
           >
             <Save className="w-5 h-5 mr-2" />
             {updateProfileMutation.isPending ? "保存中..." : "プロフィールを保存"}
           </Button>
         </form>
+
+         {/* Image Cropper Modal */}
+         {imageToCrop && (
+             <ImageCropper
+                 imageUrl={imageToCrop}
+                 onCropComplete={handleCropComplete}
+                 onCancel={() => setImageToCrop(null)}
+             />
+         )}
+
       </div>
     </div>
   );

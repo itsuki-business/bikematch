@@ -1,37 +1,25 @@
 import Layout from "./Layout.jsx";
 
-import Home from "./Home";
-
+import HomeForRegister from "./HomeForRegister";
+import HomeForNonRegister from "./HomeForNonRegister";
 import PhotographerDetail from "./PhotographerDetail";
-
 import Profile from "./Profile";
-
 import Messages from "./Messages";
-
 import ConversationDetail from "./ConversationDetail";
-
 import Terms from "./Terms";
-
 import Reviews from "./Reviews";
 
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 
 const PAGES = {
-    
-    Home: Home,
-    
+    HomeForRegister: HomeForRegister,
+    HomeForNonRegister: HomeForNonRegister,
     PhotographerDetail: PhotographerDetail,
-    
     Profile: Profile,
-    
     Messages: Messages,
-    
     ConversationDetail: ConversationDetail,
-    
     Terms: Terms,
-    
-    Reviews: Reviews,
-    
+    Reviews: Reviews
 }
 
 function _getCurrentPage(url) {
@@ -55,24 +43,15 @@ function PagesContent() {
     return (
         <Layout currentPageName={currentPage}>
             <Routes>            
-                
-                    <Route path="/" element={<Home />} />
-                
-                
-                <Route path="/Home" element={<Home />} />
-                
+                <Route path="/" element={<HomeForNonRegister />} />
+                <Route path="/HomeForRegister" element={<HomeForRegister />} />
+                <Route path="/HomeForNonRegister" element={<HomeForNonRegister />} />
                 <Route path="/PhotographerDetail" element={<PhotographerDetail />} />
-                
                 <Route path="/Profile" element={<Profile />} />
-                
                 <Route path="/Messages" element={<Messages />} />
-                
                 <Route path="/ConversationDetail" element={<ConversationDetail />} />
-                
                 <Route path="/Terms" element={<Terms />} />
-                
                 <Route path="/Reviews" element={<Reviews />} />
-                
             </Routes>
         </Layout>
     );
