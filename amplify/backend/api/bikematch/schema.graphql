@@ -6,8 +6,7 @@
 type User
   @model
   @auth(rules: [
-    { allow: owner, operations: [read, create, update, delete] },
-    { allow: private, operations: [read] }
+    { allow: private, operations: [read, create, update, delete] }
   ])
 {
   id: ID! # Cognitoのsubと同じID
@@ -47,8 +46,7 @@ enum UserType {
 type Conversation
   @model
   @auth(rules: [
-    { allow: owner, ownerField: "biker_id", operations: [read, create, update, delete] },
-    { allow: owner, ownerField: "photographer_id", operations: [read, create, update, delete] }
+    { allow: private, operations: [read, create, update, delete] }
   ])
 {
   id: ID!
@@ -66,8 +64,7 @@ type Conversation
 type Message
   @model
   @auth(rules: [
-    { allow: owner, ownerField: "sender_id", operations: [create, read, update, delete] },
-    { allow: private, operations: [read] }
+    { allow: private, operations: [read, create, update, delete] }
   ])
 {
   id: ID!
@@ -85,8 +82,7 @@ type Message
 type Portfolio
   @model
   @auth(rules: [
-    { allow: owner, ownerField: "photographer_id", operations: [read, create, update, delete] },
-    { allow: private, operations: [read] }
+    { allow: private, operations: [read, create, update, delete] }
   ])
 {
   id: ID!
@@ -100,8 +96,7 @@ type Portfolio
 type Review
   @model
   @auth(rules: [
-    { allow: owner, ownerField: "reviewer_id", operations: [read, create, update, delete] },
-    { allow: private, operations: [read] }
+    { allow: private, operations: [read, create, update, delete] }
   ])
 {
   id: ID!

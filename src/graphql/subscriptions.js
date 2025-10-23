@@ -2,11 +2,8 @@
 // this is an auto generated file. This will be overwritten
 
 export const onCreateUser = /* GraphQL */ `
-  subscription OnCreateUser(
-    $filter: ModelSubscriptionUserFilterInput
-    $owner: String
-  ) {
-    onCreateUser(filter: $filter, owner: $owner) {
+  subscription OnCreateUser($filter: ModelSubscriptionUserFilterInput) {
+    onCreateUser(filter: $filter) {
       id
       email
       nickname
@@ -50,17 +47,13 @@ export const onCreateUser = /* GraphQL */ `
       }
       createdAt
       updatedAt
-      owner
       __typename
     }
   }
 `;
 export const onUpdateUser = /* GraphQL */ `
-  subscription OnUpdateUser(
-    $filter: ModelSubscriptionUserFilterInput
-    $owner: String
-  ) {
-    onUpdateUser(filter: $filter, owner: $owner) {
+  subscription OnUpdateUser($filter: ModelSubscriptionUserFilterInput) {
+    onUpdateUser(filter: $filter) {
       id
       email
       nickname
@@ -104,17 +97,13 @@ export const onUpdateUser = /* GraphQL */ `
       }
       createdAt
       updatedAt
-      owner
       __typename
     }
   }
 `;
 export const onDeleteUser = /* GraphQL */ `
-  subscription OnDeleteUser(
-    $filter: ModelSubscriptionUserFilterInput
-    $owner: String
-  ) {
-    onDeleteUser(filter: $filter, owner: $owner) {
+  subscription OnDeleteUser($filter: ModelSubscriptionUserFilterInput) {
+    onDeleteUser(filter: $filter) {
       id
       email
       nickname
@@ -158,7 +147,6 @@ export const onDeleteUser = /* GraphQL */ `
       }
       createdAt
       updatedAt
-      owner
       __typename
     }
   }
@@ -166,14 +154,8 @@ export const onDeleteUser = /* GraphQL */ `
 export const onCreateConversation = /* GraphQL */ `
   subscription OnCreateConversation(
     $filter: ModelSubscriptionConversationFilterInput
-    $biker_id: String
-    $photographer_id: String
   ) {
-    onCreateConversation(
-      filter: $filter
-      biker_id: $biker_id
-      photographer_id: $photographer_id
-    ) {
+    onCreateConversation(filter: $filter) {
       id
       biker_id
       photographer_id
@@ -195,14 +177,8 @@ export const onCreateConversation = /* GraphQL */ `
 export const onUpdateConversation = /* GraphQL */ `
   subscription OnUpdateConversation(
     $filter: ModelSubscriptionConversationFilterInput
-    $biker_id: String
-    $photographer_id: String
   ) {
-    onUpdateConversation(
-      filter: $filter
-      biker_id: $biker_id
-      photographer_id: $photographer_id
-    ) {
+    onUpdateConversation(filter: $filter) {
       id
       biker_id
       photographer_id
@@ -224,14 +200,8 @@ export const onUpdateConversation = /* GraphQL */ `
 export const onDeleteConversation = /* GraphQL */ `
   subscription OnDeleteConversation(
     $filter: ModelSubscriptionConversationFilterInput
-    $biker_id: String
-    $photographer_id: String
   ) {
-    onDeleteConversation(
-      filter: $filter
-      biker_id: $biker_id
-      photographer_id: $photographer_id
-    ) {
+    onDeleteConversation(filter: $filter) {
       id
       biker_id
       photographer_id
@@ -251,11 +221,8 @@ export const onDeleteConversation = /* GraphQL */ `
   }
 `;
 export const onCreateMessage = /* GraphQL */ `
-  subscription OnCreateMessage(
-    $filter: ModelSubscriptionMessageFilterInput
-    $sender_id: String
-  ) {
-    onCreateMessage(filter: $filter, sender_id: $sender_id) {
+  subscription OnCreateMessage($filter: ModelSubscriptionMessageFilterInput) {
+    onCreateMessage(filter: $filter) {
       id
       conversationID
       sender_id
@@ -270,11 +237,8 @@ export const onCreateMessage = /* GraphQL */ `
   }
 `;
 export const onUpdateMessage = /* GraphQL */ `
-  subscription OnUpdateMessage(
-    $filter: ModelSubscriptionMessageFilterInput
-    $sender_id: String
-  ) {
-    onUpdateMessage(filter: $filter, sender_id: $sender_id) {
+  subscription OnUpdateMessage($filter: ModelSubscriptionMessageFilterInput) {
+    onUpdateMessage(filter: $filter) {
       id
       conversationID
       sender_id
@@ -289,11 +253,8 @@ export const onUpdateMessage = /* GraphQL */ `
   }
 `;
 export const onDeleteMessage = /* GraphQL */ `
-  subscription OnDeleteMessage(
-    $filter: ModelSubscriptionMessageFilterInput
-    $sender_id: String
-  ) {
-    onDeleteMessage(filter: $filter, sender_id: $sender_id) {
+  subscription OnDeleteMessage($filter: ModelSubscriptionMessageFilterInput) {
+    onDeleteMessage(filter: $filter) {
       id
       conversationID
       sender_id
@@ -310,9 +271,8 @@ export const onDeleteMessage = /* GraphQL */ `
 export const onCreatePortfolio = /* GraphQL */ `
   subscription OnCreatePortfolio(
     $filter: ModelSubscriptionPortfolioFilterInput
-    $photographer_id: String
   ) {
-    onCreatePortfolio(filter: $filter, photographer_id: $photographer_id) {
+    onCreatePortfolio(filter: $filter) {
       id
       photographer_id
       image_key
@@ -327,9 +287,8 @@ export const onCreatePortfolio = /* GraphQL */ `
 export const onUpdatePortfolio = /* GraphQL */ `
   subscription OnUpdatePortfolio(
     $filter: ModelSubscriptionPortfolioFilterInput
-    $photographer_id: String
   ) {
-    onUpdatePortfolio(filter: $filter, photographer_id: $photographer_id) {
+    onUpdatePortfolio(filter: $filter) {
       id
       photographer_id
       image_key
@@ -344,9 +303,8 @@ export const onUpdatePortfolio = /* GraphQL */ `
 export const onDeletePortfolio = /* GraphQL */ `
   subscription OnDeletePortfolio(
     $filter: ModelSubscriptionPortfolioFilterInput
-    $photographer_id: String
   ) {
-    onDeletePortfolio(filter: $filter, photographer_id: $photographer_id) {
+    onDeletePortfolio(filter: $filter) {
       id
       photographer_id
       image_key
@@ -359,11 +317,8 @@ export const onDeletePortfolio = /* GraphQL */ `
   }
 `;
 export const onCreateReview = /* GraphQL */ `
-  subscription OnCreateReview(
-    $filter: ModelSubscriptionReviewFilterInput
-    $reviewer_id: String
-  ) {
-    onCreateReview(filter: $filter, reviewer_id: $reviewer_id) {
+  subscription OnCreateReview($filter: ModelSubscriptionReviewFilterInput) {
+    onCreateReview(filter: $filter) {
       id
       reviewer_id
       reviewee_id
@@ -377,11 +332,8 @@ export const onCreateReview = /* GraphQL */ `
   }
 `;
 export const onUpdateReview = /* GraphQL */ `
-  subscription OnUpdateReview(
-    $filter: ModelSubscriptionReviewFilterInput
-    $reviewer_id: String
-  ) {
-    onUpdateReview(filter: $filter, reviewer_id: $reviewer_id) {
+  subscription OnUpdateReview($filter: ModelSubscriptionReviewFilterInput) {
+    onUpdateReview(filter: $filter) {
       id
       reviewer_id
       reviewee_id
@@ -395,11 +347,8 @@ export const onUpdateReview = /* GraphQL */ `
   }
 `;
 export const onDeleteReview = /* GraphQL */ `
-  subscription OnDeleteReview(
-    $filter: ModelSubscriptionReviewFilterInput
-    $reviewer_id: String
-  ) {
-    onDeleteReview(filter: $filter, reviewer_id: $reviewer_id) {
+  subscription OnDeleteReview($filter: ModelSubscriptionReviewFilterInput) {
+    onDeleteReview(filter: $filter) {
       id
       reviewer_id
       reviewee_id

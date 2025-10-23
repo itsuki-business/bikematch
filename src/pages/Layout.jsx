@@ -133,14 +133,23 @@ export default function Layout({ children, currentPageName }) {
   };
 
   const handleRegisterSuccess = async () => {
-    console.log('Layout - Register success, closing modal and navigating to home-for-register');
+    console.log('Layout - Register success, closing modal and navigating to profile');
     setShowRegisterModal(false);
     
     // 認証状態を再チェック
     await checkCurrentUser();
     
-    // 登録成功後、登録者専用のHomeページ（src/pages/HomeForRegister.jsx）に直接遷移
-    navigate('/home-for-register');
+    // 登録成功後、プロフィール編集ページに直接遷移（初回登録）
+    // userIdを取得するため少し待つ
+    setTimeout(async () => {
+      try {
+        const currentUser = await getCurrentUser();
+        navigate(`/profile/${currentUser.userId}`);
+      } catch (error) {
+        console.error('Error getting userId:', error);
+        navigate('/home-for-register');
+      }
+    }, 500);
   };
 
   const handleLogout = async () => {
@@ -159,7 +168,7 @@ export default function Layout({ children, currentPageName }) {
   const authenticatedNavigationItems = [
     { title: "ホーム", url: "/home-for-register", icon: Home },
     { title: "プロフィール", url: user?.id ? `/profile/${user.id}` : "/profile", icon: User },
-    { title: "メッセージ", url: "/messages", icon: MessageSquare },
+    { title: "メッセージ", url: user?.id ? `/messages/${user.id}` : "/messages", icon: MessageSquare },
     { title: "評価・口コミ", url: "/reviews", icon: Star },
     { title: "利用規約", url: "/terms", icon: FileText },
   ];

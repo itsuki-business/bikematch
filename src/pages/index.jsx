@@ -4,7 +4,8 @@ import HomeForRegister from "./HomeForRegister";
 import HomeForNonRegister from "./HomeForNonRegister";
 import PhotographerDetail from "./PhotographerDetail";
 import Profile from "./Profile";
-import Messages from "./Messages";
+import MessageList from "./MessageList";
+import UserMessage from "./UserMessage";
 import ConversationDetail from "./ConversationDetail";
 import Terms from "./Terms";
 import Reviews from "./Reviews";
@@ -16,7 +17,8 @@ const PAGES = {
     HomeForNonRegister: HomeForNonRegister,
     PhotographerDetail: PhotographerDetail,
     Profile: Profile,
-    Messages: Messages,
+    MessageList: MessageList,
+    UserMessage: UserMessage,
     ConversationDetail: ConversationDetail,
     Terms: Terms,
     Reviews: Reviews
@@ -48,7 +50,8 @@ function PagesContent() {
                 <Route path="/home-for-non-register" element={<HomeForNonRegister />} />
                 <Route path="/photographer-detail" element={<PhotographerDetail />} />
                 <Route path="/profile/:userId" element={<Profile />} />
-                <Route path="/messages" element={<Messages />} />
+                <Route path="/messages/:myUserId" element={<MessageList />} />
+                <Route path="/messages/:myUserId/:otherUserId" element={<UserMessage />} />
                 <Route path="/conversation-detail" element={<ConversationDetail />} />
                 <Route path="/terms" element={<Terms />} />
                 <Route path="/reviews" element={<Reviews />} />

@@ -7,10 +7,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 // import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"; // 初期登録では不要かも
 import { Eye, EyeOff, Mail, Lock, User, /*Camera, Bike,*/ AlertCircle, CheckCircle } from "lucide-react";
 // --- Amplify ---
-import { signUp, confirmSignUp, signIn, resendSignUpCode, getCurrentUser } from 'aws-amplify/auth';
+import { signUp, confirmSignUp, signIn, resendSignUpCode, getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
+import { generateClient } from 'aws-amplify/api';
 import { Hub } from 'aws-amplify/utils';
-// import { API, graphqlOperation } from 'aws-amplify'; // ユーザーDBに登録する場合
-// import { createUser } from '@/graphql/mutations'; // ユーザーDB用Mutation
+import { createUser } from '@/graphql/mutations';
 // ---------------
 // import { bikematch } from "@/api/bikematchClient"; // 不要
 
@@ -167,6 +167,29 @@ export default function RegisterModal({ isOpen, onClose, onSuccess }) {
           isSignedIn: loginResult.isSignedIn,
           nextStep: loginResult.nextStep
         };
+
+      // DBにユーザーレコードを作成
+      try {
+        console.log('Creating user record in DB...');
+        const client = generateClient();
+        const attributes = await fetchUserAttributes();
+        await client.graphql({
+          query: createUser,
+          variables: {
+            input: {
+              id: userInfo.userId,
+              email: formData.email,
+              nickname: formData.name || formData.email.split('@')[0],
+              average_rating: 0,
+              review_count: 0
+            }
+          }
+        });
+        console.log('User record created successfully in DB');
+      } catch (dbError) {
+        console.error('Error creating user record in DB:', dbError);
+        // DB作成エラーでも続行（後でプロフィールページで作成可能）
+      }
 
       // Hubイベントを発火して認証状態の変更を通知
       Hub.dispatch('auth', {

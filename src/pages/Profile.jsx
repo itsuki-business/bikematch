@@ -6,7 +6,7 @@ import { generateClient } from 'aws-amplify/api';
 import { getUrl, uploadData } from 'aws-amplify/storage';
 // import { DataStore } from '@aws-amplify/datastore';
 import { getUser, listPortfolios } from '@/graphql/queries';
-import { createUser, updateUser, createPortfolio, deletePortfolio } from '@/graphql/mutations';
+import { updateUser, createPortfolio, deletePortfolio } from '@/graphql/mutations';
 // import { User as UserModel, Portfolio as PortfolioModel } from '@/models'; // DataStoreの場合
 // ---------------
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,9 +18,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Upload, X, Plus, Save, Camera, AlertCircle, Link as LinkIcon, User } from "lucide-react";
+import { Upload, X, Plus, Save, Camera, AlertCircle, Link as LinkIcon, User, MessageSquare } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import ImageCropper from "@/components/profile/ImageCropper"; // Assuming ImageCropper exists
+// ImageCropperは不要 - 直接アップロード
 import { Skeleton } from "@/components/ui/skeleton"; // For loading state
 
 // Constants
@@ -78,7 +78,6 @@ export default function Profile() {
   const [uploadingPortfolio, setUploadingPortfolio] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState(""); // For errors
-  const [imageToCrop, setImageToCrop] = useState(null); // For cropper
   const [profileImageUrl, setProfileImageUrl] = useState(null); // Display URL for profile image
 
   // --- Fetch User Data ---
@@ -159,7 +158,7 @@ export default function Profile() {
                 special_conditions: [], is_accepting_requests: false
             });
             setProfileImageUrl(null);
-            setErrorMessage("初回ログインです。プロフィール情報を入力して保存してください。");
+            setSuccessMessage("BikeMatchへようこそ！プロフィール情報を入力してください。");
           } else {
             // 他人のプロフィールが存在しない場合
             setErrorMessage("このユーザーのプロフィールは存在しません。");
@@ -228,8 +227,14 @@ export default function Profile() {
   // --- Update Profile Mutation ---
   const updateProfileMutation = useMutation({
     mutationFn: async (profileData) => {
-      if (!cognitoSub) throw new Error("User ID not available");
+      if (!cognitoSub) {
+        console.error("cognitoSub is null");
+        throw new Error("User ID not available");
+      }
       setErrorMessage(""); // Clear previous errors
+
+      console.log("Starting profile save with cognitoSub:", cognitoSub);
+      console.log("Profile data received:", profileData);
 
       // Prepare data for GraphQL mutation (exclude fields not in schema if necessary)
       const inputData = {
@@ -262,38 +267,14 @@ export default function Profile() {
       // --- Amplify API (GraphQL) ---
       const client = generateClient();
       
-      // ユーザーが存在するか確認
-      const checkUser = await client.graphql({
-        query: getUser,
-        variables: { id: cognitoSub }
+      // ユーザーレコードは新規登録時に作成されているので、updateのみ
+      console.log("Updating user profile...");
+      const result = await client.graphql({
+        query: updateUser,
+        variables: { input: inputData }
       });
-      
-      let result;
-      if (checkUser.data.getUser) {
-        // 既存ユーザーの場合は更新
-        console.log("User exists, updating...");
-        result = await client.graphql({
-          query: updateUser,
-          variables: { input: inputData }
-        });
-        return result.data.updateUser;
-      } else {
-        // 新規ユーザーの場合は作成
-        console.log("User does not exist, creating...");
-        // emailはCognitoから取得
-        const attributes = await fetchUserAttributes();
-        const createData = {
-          ...inputData,
-          email: attributes.email,
-          average_rating: 0,
-          review_count: 0
-        };
-        result = await client.graphql({
-          query: createUser,
-          variables: { input: createData }
-        });
-        return result.data.createUser;
-      }
+      console.log("Update successful:", result);
+      return result.data.updateUser;
       // -----------------------------
 
       // --- DataStoreの場合 ---
@@ -324,9 +305,11 @@ export default function Profile() {
         // window.location.reload(); // Reload might not be necessary if state updates handle UI correctly
       }, 2000); // Show success for 2 seconds
     },
-     onError: (error) => {
-         console.error("Profile update failed:", error);
-         setErrorMessage(`プロフィールの更新に失敗しました: ${error.message || '不明なエラー'}`);
+    onError: (error) => {
+        console.error("Profile update failed:", error);
+        console.error("Error details:", JSON.stringify(error, null, 2));
+        const errorMessage = error.errors?.[0]?.message || error.message || '不明なエラー';
+        setErrorMessage(`プロフィールの更新に失敗しました: ${errorMessage}`);
      }
   });
 
@@ -361,13 +344,15 @@ export default function Profile() {
     },
     onSuccess: (newPortfolioItem) => {
       // Invalidate portfolio query to refetch
-      queryClient.invalidateQueries({ queryKey: ['my-portfolio', cognitoSub] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio', cognitoSub] });
        setSuccessMessage("ポートフォリオ画像を追加しました。");
        setTimeout(() => setSuccessMessage(""), 2000);
     },
     onError: (error) => {
         console.error("Add portfolio failed:", error);
-        setErrorMessage(`ポートフォリオの追加に失敗しました: ${error.message || '不明なエラー'}`);
+        console.error("Error details:", JSON.stringify(error, null, 2));
+        const errorMessage = error.errors?.[0]?.message || error.message || '不明なエラー';
+        setErrorMessage(`ポートフォリオの追加に失敗しました: ${errorMessage}`);
     }
   });
 
@@ -410,7 +395,7 @@ export default function Profile() {
     onSuccess: (deletedItem) => {
         console.log("Deleted portfolio:", deletedItem?.id);
         // Invalidate portfolio query to refetch
-        queryClient.invalidateQueries({ queryKey: ['my-portfolio', cognitoSub] });
+        queryClient.invalidateQueries({ queryKey: ['portfolio', cognitoSub] });
         setSuccessMessage("ポートフォリオ画像を削除しました。");
         setTimeout(() => setSuccessMessage(""), 2000);
     },
@@ -427,38 +412,26 @@ export default function Profile() {
       document.getElementById('profile-image-upload')?.click();
   };
 
-  // Handle profile image selection (opens cropper)
-  const handleProfileImageSelect = (e) => {
+  // Handle profile image selection (直接アップロード、切り抜きなし)
+  const handleProfileImageSelect = async (e) => {
       const file = e.target.files?.[0];
-      if (file) {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-              setImageToCrop(reader.result); // Pass Data URL to cropper
-          };
-          reader.readAsDataURL(file);
-      }
-      e.target.value = ''; // Reset file input
-  };
-
-  // Handle crop completion
-  const handleCropComplete = async (blob) => {
-      if (!blob || !cognitoSub) return;
-      setImageToCrop(null); // Close cropper
+      if (!file || !cognitoSub) return;
+      
       setUploadingImage(true);
       setErrorMessage("");
       setSuccessMessage("");
+      
       try {
           // Generate a unique key for S3
-          const fileExtension = blob.type.split('/')[1] || 'jpg';
-          const fileName = `profile-images/${cognitoSub}-profile.${fileExtension}`; // Consistent name for easier retrieval/overwrite
+          const fileExtension = file.name.split('.').pop() || 'jpg';
+          const fileName = `profile-images/${cognitoSub}-profile.${fileExtension}`;
 
           // --- Amplify Storage ---
           const result = await uploadData({
             key: fileName,
-            data: blob,
+            data: file,
             options: {
-              contentType: blob.type,
-              // level: 'protected', // Consider access level 'protected' or 'private' if needed
+              contentType: file.type,
             }
           }).result;
           console.log("Profile image uploaded:", result);
@@ -471,21 +444,28 @@ export default function Profile() {
           setSuccessMessage("プロフィール画像を更新しました。変更を保存してください。");
 
       } catch (error) {
-          console.error("Error uploading cropped image:", error);
+          console.error("Error uploading profile image:", error);
           setErrorMessage("プロフィール画像のアップロードに失敗しました。");
       } finally {
           setUploadingImage(false);
+          e.target.value = ''; // Reset file input
       }
   };
 
 
   const handlePortfolioUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file || !cognitoSub) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0 || !cognitoSub) return;
 
-    if (portfolio.length >= MAX_PORTFOLIO_IMAGES) {
+    const remainingSlots = MAX_PORTFOLIO_IMAGES - portfolio.length;
+    if (remainingSlots <= 0) {
       alert(`ポートフォリオは最大${MAX_PORTFOLIO_IMAGES}枚までです`);
       return;
+    }
+
+    const filesToUpload = files.slice(0, remainingSlots);
+    if (files.length > remainingSlots) {
+      alert(`${remainingSlots}枚のみアップロードします（最大${MAX_PORTFOLIO_IMAGES}枚）`);
     }
 
     setUploadingPortfolio(true);
@@ -493,23 +473,28 @@ export default function Profile() {
     setSuccessMessage("");
 
     try {
-        const timestamp = Date.now();
-        const fileName = `portfolio/${cognitoSub}/${timestamp}-${file.name}`; // Unique key
+        // 複数ファイルを順番にアップロード
+        for (const file of filesToUpload) {
+          const timestamp = Date.now();
+          const randomStr = Math.random().toString(36).substring(7);
+          const fileName = `portfolio/${cognitoSub}/${timestamp}-${randomStr}-${file.name}`;
 
-        // --- Amplify Storage ---
-        const result = await uploadData({
-          key: fileName,
-          data: file,
-          options: {
-            contentType: file.type,
-            // level: 'public' // Portfolio images are likely public
-          }
-        }).result;
-        console.log("Portfolio image uploaded:", result);
-        // --------------------
+          // --- Amplify Storage ---
+          const result = await uploadData({
+            key: fileName,
+            data: file,
+            options: {
+              contentType: file.type,
+            }
+          }).result;
+          console.log("Portfolio image uploaded:", result);
 
-        // Add to portfolio DB via mutation
-        addPortfolioMutation.mutate({ image_key: result.key });
+          // Add to portfolio DB via mutation
+          await addPortfolioMutation.mutateAsync({ image_key: result.key });
+        }
+
+        setSuccessMessage(`${filesToUpload.length}枚のポートフォリオ画像を追加しました。`);
+        setTimeout(() => setSuccessMessage(""), 2000);
 
     } catch (error) {
         console.error("Error uploading portfolio image:", error);
@@ -599,7 +584,16 @@ export default function Profile() {
             {isOwnProfile ? 'プロフィール編集' : `${user?.nickname || 'ユーザー'}のプロフィール`}
           </h1>
           {!isOwnProfile && (
-            <Badge variant="outline" className="text-sm">閲覧モード</Badge>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => navigate(`/messages/${currentUserId}/${userId}`)}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                <MessageSquare className="w-4 h-4 mr-2" />
+                メッセージを送る
+              </Button>
+              <Badge variant="outline" className="text-sm">閲覧モード</Badge>
+            </div>
           )}
         </div>
 
@@ -689,20 +683,20 @@ export default function Profile() {
                  <Label>プロフィール画像</Label>
                  <div className="mt-2 flex items-center gap-4">
                    {/* Image Preview */}
-                   <div className="relative w-24 h-24 flex-shrink-0"> {/* Adjusted size */}
+                   <div className="relative w-24 h-24 flex-shrink-0">
                      {profileImageUrl ? (
                        <img
                          src={profileImageUrl}
                          alt="Profile Preview"
-                         className="w-full h-full object-cover rounded-full border-2 border-gray-200" // rounded-full
+                         className="w-full h-full object-cover object-center rounded-lg border-2 border-gray-200"
                        />
                      ) : (
-                       <div className="w-full h-full bg-gray-200 rounded-full flex items-center justify-center text-gray-500">
+                       <div className="w-full h-full bg-gray-200 rounded-lg flex items-center justify-center text-gray-500">
                          <User className="w-10 h-10" />
                        </div>
                      )}
-                     {uploadingImage && ( // Show overlay while uploading
-                         <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                     {uploadingImage && (
+                         <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
                              <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-white"></div>
                          </div>
                      )}
@@ -1018,6 +1012,7 @@ export default function Profile() {
                             onChange={handlePortfolioUpload}
                             className="hidden"
                             disabled={uploadingPortfolio}
+                            multiple
                           />
                           <div className="flex flex-col items-center text-center">
                             {uploadingPortfolio ? (
@@ -1108,15 +1103,6 @@ export default function Profile() {
             </Button>
           )}
         </form>
-
-         {/* Image Cropper Modal */}
-         {imageToCrop && (
-             <ImageCropper
-                 imageUrl={imageToCrop}
-                 onCropComplete={handleCropComplete}
-                 onCancel={() => setImageToCrop(null)}
-             />
-         )}
 
       </div>
     </div>

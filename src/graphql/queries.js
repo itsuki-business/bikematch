@@ -47,7 +47,6 @@ export const getUser = /* GraphQL */ `
       }
       createdAt
       updatedAt
-      owner
       __typename
     }
   }
@@ -83,7 +82,6 @@ export const listUsers = /* GraphQL */ `
         review_count
         createdAt
         updatedAt
-        owner
         __typename
       }
       nextToken
