@@ -47,6 +47,7 @@ export const getUser = /* GraphQL */ `
       }
       createdAt
       updatedAt
+      _version
       __typename
     }
   }
