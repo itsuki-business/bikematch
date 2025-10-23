@@ -111,7 +111,7 @@ export default function HomeForRegister() {
       } catch (error) {
         console.error('HomeForRegister - Not authenticated:', error);
         // 認証されていない場合はHomeForNonRegisterにリダイレクト
-        navigate('/HomeForNonRegister');
+        navigate('/home-for-non-register');
       } finally {
         setIsLoadingUser(false);
       }
@@ -145,7 +145,7 @@ export default function HomeForRegister() {
             <AlertDescription className="text-blue-900">
               フォトグラファーの方は、ライダーからの依頼をお待ちください。プロフィールを充実させて、魅力的なポートフォリオを作成しましょう。
               <Button 
-                onClick={() => navigate('/Profile')} 
+                onClick={() => navigate(`/profile/${currentUser?.userId}`)} 
                 variant="outline" 
                 size="sm" 
                 className="ml-2 border-blue-300 text-blue-700 hover:bg-blue-100"
@@ -162,7 +162,7 @@ export default function HomeForRegister() {
             <AlertDescription className="text-green-900">
               ライダーの方は、下記から理想のフォトグラファーを探して撮影を依頼しましょう。
               <Button 
-                onClick={() => navigate('/Profile')} 
+                onClick={() => navigate(`/profile/${currentUser?.userId}`)} 
                 variant="outline" 
                 size="sm" 
                 className="ml-2 border-green-300 text-green-700 hover:bg-green-100"
@@ -179,7 +179,7 @@ export default function HomeForRegister() {
             <AlertDescription className="text-yellow-900">
               プロフィールを設定して、より充実したサービスをご利用ください。
               <Button 
-                onClick={() => navigate('/Profile')} 
+                onClick={() => navigate(`/profile/${currentUser?.userId}`)} 
                 variant="outline" 
                 size="sm" 
                 className="ml-2 border-yellow-300 text-yellow-700 hover:bg-yellow-100"

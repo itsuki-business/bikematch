@@ -44,14 +44,14 @@ function PagesContent() {
         <Layout currentPageName={currentPage}>
             <Routes>            
                 <Route path="/" element={<HomeForNonRegister />} />
-                <Route path="/HomeForRegister" element={<HomeForRegister />} />
-                <Route path="/HomeForNonRegister" element={<HomeForNonRegister />} />
-                <Route path="/PhotographerDetail" element={<PhotographerDetail />} />
-                <Route path="/Profile" element={<Profile />} />
-                <Route path="/Messages" element={<Messages />} />
-                <Route path="/ConversationDetail" element={<ConversationDetail />} />
-                <Route path="/Terms" element={<Terms />} />
-                <Route path="/Reviews" element={<Reviews />} />
+                <Route path="/home-for-register" element={<HomeForRegister />} />
+                <Route path="/home-for-non-register" element={<HomeForNonRegister />} />
+                <Route path="/photographer-detail" element={<PhotographerDetail />} />
+                <Route path="/profile/:userId" element={<Profile />} />
+                <Route path="/messages" element={<Messages />} />
+                <Route path="/conversation-detail" element={<ConversationDetail />} />
+                <Route path="/terms" element={<Terms />} />
+                <Route path="/reviews" element={<Reviews />} />
             </Routes>
         </Layout>
     );

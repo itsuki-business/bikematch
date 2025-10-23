@@ -122,46 +122,46 @@ export default function Layout({ children, currentPageName }) {
   };
 
   const handleLoginSuccess = async () => {
-    console.log('Layout - Login success, closing modal and navigating to HomeForRegister');
+    console.log('Layout - Login success, closing modal and navigating to home-for-register');
     setShowLoginModal(false);
     
     // 認証状態を再チェック
     await checkCurrentUser();
     
     // ログイン成功後、登録者専用のHomeページ（src/pages/HomeForRegister.jsx）に直接遷移
-    navigate('/HomeForRegister');
+    navigate('/home-for-register');
   };
 
   const handleRegisterSuccess = async () => {
-    console.log('Layout - Register success, closing modal and navigating to HomeForRegister');
+    console.log('Layout - Register success, closing modal and navigating to home-for-register');
     setShowRegisterModal(false);
     
     // 認証状態を再チェック
     await checkCurrentUser();
     
     // 登録成功後、登録者専用のHomeページ（src/pages/HomeForRegister.jsx）に直接遷移
-    navigate('/HomeForRegister');
+    navigate('/home-for-register');
   };
 
   const handleLogout = async () => {
     try {
       await signOut();
-      navigate('/HomeForNonRegister');
+      navigate('/home-for-non-register');
     } catch (error) {
       console.error('Error signing out: ', error);
     }
   };
 
   const publicNavigationItems = [
-    { title: "ホーム", url: "/HomeForNonRegister", icon: Home },
-    { title: "利用規約", url: createPageUrl("Terms"), icon: FileText },
+    { title: "ホーム", url: "/home-for-non-register", icon: Home },
+    { title: "利用規約", url: "/terms", icon: FileText },
   ];
   const authenticatedNavigationItems = [
-    { title: "ホーム", url: "/HomeForRegister", icon: Home },
-    { title: "プロフィール", url: createPageUrl("Profile"), icon: User },
-    { title: "メッセージ", url: createPageUrl("Messages"), icon: MessageSquare },
-    { title: "評価・口コミ", url: createPageUrl("Reviews"), icon: Star },
-    { title: "利用規約", url: createPageUrl("Terms"), icon: FileText },
+    { title: "ホーム", url: "/home-for-register", icon: Home },
+    { title: "プロフィール", url: user?.id ? `/profile/${user.id}` : "/profile", icon: User },
+    { title: "メッセージ", url: "/messages", icon: MessageSquare },
+    { title: "評価・口コミ", url: "/reviews", icon: Star },
+    { title: "利用規約", url: "/terms", icon: FileText },
   ];
   const navigationItems = user ? authenticatedNavigationItems : publicNavigationItems;
 
@@ -179,7 +179,7 @@ export default function Layout({ children, currentPageName }) {
       <div className="min-h-screen flex w-full bg-gradient-to-br from-blue-50 to-white">
         <Sidebar className="border-r border-gray-200 bg-white shadow-lg">
           <SidebarHeader className="border-b border-gray-200 p-6 bg-gradient-to-r from-blue-50 to-white">
-            <Link to={user ? "/HomeForRegister" : "/HomeForNonRegister"} className="flex items-center gap-3 group">
+            <Link to={user ? "/home-for-register" : "/home-for-non-register"} className="flex items-center gap-3 group">
                <div className="relative">
                  <div className="w-12 h-12 bg-gradient-to-br from-red-600 to-red-700 rounded-xl flex items-center justify-center shadow-lg transform transition-transform duration-300 group-hover:scale-110">
                    <Bike className="w-7 h-7 text-white" />

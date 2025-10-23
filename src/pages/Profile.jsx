@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 // --- Amplify v6 ---
 import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/api';
 import { getUrl, uploadData } from 'aws-amplify/storage';
 // import { DataStore } from '@aws-amplify/datastore';
 import { getUser, listPortfolios } from '@/graphql/queries';
-import { updateUser, createPortfolio, deletePortfolio } from '@/graphql/mutations';
+import { createUser, updateUser, createPortfolio, deletePortfolio } from '@/graphql/mutations';
 // import { User as UserModel, Portfolio as PortfolioModel } from '@/models'; // DataStoreの場合
 // ---------------
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -49,8 +49,11 @@ const MAX_PORTFOLIO_IMAGES = 10;
 export default function Profile() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { userId } = useParams(); // URLパラメータからuserIdを取得
   const [user, setUser] = useState(null); // Combined Cognito + App DB user
   const [cognitoSub, setCognitoSub] = useState(null); // Store Cognito sub (ID)
+  const [currentUserId, setCurrentUserId] = useState(null); // ログイン中のユーザーID
+  const [isOwnProfile, setIsOwnProfile] = useState(false); // 自分のプロフィールかどうか
   const [formData, setFormData] = useState({ // Initialize with default structure
       user_type: "",
       nickname: "",
@@ -84,16 +87,31 @@ export default function Profile() {
       setIsLoadingUser(true);
       setErrorMessage(""); // Clear previous errors
       try {
+        // 現在のログインユーザーを取得
         const cognitoUser = await getCurrentUser();
         const attributes = await fetchUserAttributes();
-        const sub = cognitoUser.userId; // Get the unique user ID
-        setCognitoSub(sub);
+        const currentId = cognitoUser.userId; // Get the unique user ID
+        setCurrentUserId(currentId);
+        setCognitoSub(currentId);
+
+        // URLパラメータでuserIdが指定されていない場合は、自分のプロフィールにリダイレクト
+        if (!userId) {
+          console.log('No userId in URL, redirecting to own profile');
+          navigate(`/profile/${currentId}`, { replace: true });
+          return;
+        }
+        
+        // 自分のプロフィールかどうかを判定
+        const isOwn = userId === currentId;
+        setIsOwnProfile(isOwn);
+
+        console.log(`Profile page - Current user: ${currentId}, Target user: ${userId}, IsOwn: ${isOwn}`);
 
         // Fetch user data from App DB (GraphQL)
         const client = generateClient();
         const userDataResult = await client.graphql({
           query: getUser,
-          variables: { id: sub }
+          variables: { id: userId }
         });
         const appUser = userDataResult.data.getUser;
 
@@ -126,24 +144,30 @@ export default function Profile() {
            }
         } else {
           // Handle case where user exists in Cognito but not in App DB (e.g., first login after signup)
-          console.warn("User data not found in DB for Cognito user:", sub);
-          setUser({ ...attributes, id: sub }); // Use Cognito data + ID
-           setFormData({ // Populate form with Cognito data where possible
-               nickname: attributes.name || "",
-               // Reset other fields or set defaults
-               user_type: "", prefecture: "", bike_maker: "", bike_model: "",
-               shooting_genres: [], price_range_min: "", price_range_max: "",
-               equipment: "", bio: "", profile_image: null, portfolio_website: "",
-               instagram_url: "", twitter_url: "", youtube_url: "",
-               special_conditions: [], is_accepting_requests: false
-           });
-           setProfileImageUrl(null);
-          // Consider creating the user entry in the DB here
-          setErrorMessage("プロフィール情報が見つかりません。初回は情報を入力して保存してください。");
+          console.warn("User data not found in DB for Cognito user:", userId);
+          
+          // 自分のプロフィールの場合のみ、初回登録として扱う
+          if (isOwn) {
+            setUser({ ...attributes, id: userId }); // Use Cognito data + ID
+            setFormData({ // Populate form with Cognito data where possible
+                nickname: attributes.name || attributes.email?.split('@')[0] || "",
+                // Reset other fields or set defaults
+                user_type: "", prefecture: "", bike_maker: "", bike_model: "",
+                shooting_genres: [], price_range_min: "", price_range_max: "",
+                equipment: "", bio: "", profile_image: null, portfolio_website: "",
+                instagram_url: "", twitter_url: "", youtube_url: "",
+                special_conditions: [], is_accepting_requests: false
+            });
+            setProfileImageUrl(null);
+            setErrorMessage("初回ログインです。プロフィール情報を入力して保存してください。");
+          } else {
+            // 他人のプロフィールが存在しない場合
+            setErrorMessage("このユーザーのプロフィールは存在しません。");
+          }
         }
       } catch (error) {
         console.error('Error fetching user:', error);
-        setErrorMessage("ユーザー情報の取得に失敗しました。");
+        // エラーメッセージは表示せず、ログのみ記録
          // Redirect to login if not authenticated
          if (error.message === 'The user is not authenticated' || error.name === 'NotAuthorizedException') {
              // Redirect to home page if not authenticated
@@ -155,7 +179,7 @@ export default function Profile() {
     };
 
     fetchUserData();
-  }, []); // Fetch on initial mount
+  }, [userId, navigate]); // userIdが変わったら再取得
 
     // Function to get temporary URL for S3 image
     const fetchProfileImageUrl = async (key) => {
@@ -193,7 +217,7 @@ export default function Profile() {
         // --------------------
       } catch (error) {
         console.error('Portfolio fetch error:', error);
-        setErrorMessage("ポートフォリオの取得に失敗しました。");
+        // 初回ユーザーの場合はポートフォリオが存在しないのが正常なので、エラーメッセージは表示しない
         return [];
       }
     },
@@ -233,15 +257,43 @@ export default function Profile() {
        // Object.keys(inputData).forEach(key => (inputData[key] === null) && delete inputData[key]);
 
 
-      console.log("Updating profile with data:", inputData);
+      console.log("Saving profile with data:", inputData);
 
       // --- Amplify API (GraphQL) ---
       const client = generateClient();
-      const result = await client.graphql({
-        query: updateUser,
-        variables: { input: inputData }
+      
+      // ユーザーが存在するか確認
+      const checkUser = await client.graphql({
+        query: getUser,
+        variables: { id: cognitoSub }
       });
-      return result.data.updateUser; // Return updated user data
+      
+      let result;
+      if (checkUser.data.getUser) {
+        // 既存ユーザーの場合は更新
+        console.log("User exists, updating...");
+        result = await client.graphql({
+          query: updateUser,
+          variables: { input: inputData }
+        });
+        return result.data.updateUser;
+      } else {
+        // 新規ユーザーの場合は作成
+        console.log("User does not exist, creating...");
+        // emailはCognitoから取得
+        const attributes = await fetchUserAttributes();
+        const createData = {
+          ...inputData,
+          email: attributes.email,
+          average_rating: 0,
+          review_count: 0
+        };
+        result = await client.graphql({
+          query: createUser,
+          variables: { input: createData }
+        });
+        return result.data.createUser;
+      }
       // -----------------------------
 
       // --- DataStoreの場合 ---
@@ -521,27 +573,35 @@ export default function Profile() {
     );
   }
 
-   if (!user && !isLoadingUser) { // Only show error if not loading and no user
-       return (
-           <div className="max-w-4xl mx-auto px-4 md:px-8 py-8">
-               <div className="text-center">
-                   <p className="text-red-600 mb-4">ユーザー情報の読み込みに失敗しました。</p>
-                   <button 
-                       onClick={() => navigate('/')}
-                       className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                   >
-                       ホームに戻る
-                   </button>
-               </div>
-           </div>
-       );
-   }
+  // 自分のプロフィールでない場合、かつユーザーデータがない場合はエラー表示
+  if (!isOwnProfile && !user && !isLoadingUser) {
+      return (
+          <div className="max-w-4xl mx-auto px-4 md:px-8 py-8">
+              <div className="text-center">
+                  <p className="text-red-600 mb-4">このユーザーのプロフィールは存在しません。</p>
+                  <button 
+                      onClick={() => navigate('/home-for-register')}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                      ホームに戻る
+                  </button>
+              </div>
+          </div>
+      );
+  }
 
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white py-8">
       <div className="max-w-4xl mx-auto px-4 md:px-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">プロフィール編集</h1>
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">
+            {isOwnProfile ? 'プロフィール編集' : `${user?.nickname || 'ユーザー'}のプロフィール`}
+          </h1>
+          {!isOwnProfile && (
+            <Badge variant="outline" className="text-sm">閲覧モード</Badge>
+          )}
+        </div>
 
         {/* Success and Error Messages */}
         {successMessage && (
@@ -573,6 +633,7 @@ export default function Profile() {
                   value={formData.user_type || ""}
                   onValueChange={(value) => setFormData({ ...formData, user_type: value })}
                   required
+                  disabled={!isOwnProfile}
                 >
                   <SelectTrigger id="userType">
                     <SelectValue placeholder="選択してください" />
@@ -598,6 +659,7 @@ export default function Profile() {
                   onChange={(e) => setFormData({ ...formData, nickname: e.target.value })}
                   placeholder="ニックネームを入力"
                   required
+                  disabled={!isOwnProfile}
                 />
               </div>
 
@@ -609,6 +671,7 @@ export default function Profile() {
                   value={formData.prefecture || ""}
                   onValueChange={(value) => setFormData({ ...formData, prefecture: value })}
                   required
+                  disabled={!isOwnProfile}
                 >
                   <SelectTrigger id="prefecture">
                     <SelectValue placeholder="選択してください" />
@@ -644,35 +707,37 @@ export default function Profile() {
                          </div>
                      )}
                    </div>
-                   {/* Upload/Remove Buttons */}
-                   <div className="space-y-2">
-                       <Button
-                           type="button"
-                           variant="outline"
-                           onClick={triggerProfileImageUpload}
-                           disabled={uploadingImage}
-                       >
-                           <Upload className="w-4 h-4 mr-2" />
-                           画像を変更
-                       </Button>
-                       {formData.profile_image && ( // Show remove button only if image exists
-                           <Button
-                           type="button"
-                           variant="ghost"
-                           size="sm"
-                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                           onClick={() => {
-                               setFormData({ ...formData, profile_image: null });
-                               setProfileImageUrl(null); // Clear preview
-                               // Optionally add Storage.remove(formData.profile_image) in mutation or here
-                           }}
-                           disabled={uploadingImage}
-                           >
-                           <X className="w-4 h-4 mr-1" />
-                           削除
-                           </Button>
-                       )}
-                   </div>
+                  {/* Upload/Remove Buttons - 自分のプロフィールの場合のみ表示 */}
+                  {isOwnProfile && (
+                    <div className="space-y-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={triggerProfileImageUpload}
+                            disabled={uploadingImage}
+                        >
+                            <Upload className="w-4 h-4 mr-2" />
+                            画像を変更
+                        </Button>
+                        {formData.profile_image && ( // Show remove button only if image exists
+                            <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => {
+                                setFormData({ ...formData, profile_image: null });
+                                setProfileImageUrl(null); // Clear preview
+                                // Optionally add Storage.remove(formData.profile_image) in mutation or here
+                            }}
+                            disabled={uploadingImage}
+                            >
+                            <X className="w-4 h-4 mr-1" />
+                            削除
+                            </Button>
+                        )}
+                    </div>
+                  )}
                    {/* Hidden file input */}
                    <input
                        id="profile-image-upload"
@@ -1031,15 +1096,17 @@ export default function Profile() {
             </>
           )}
 
-          {/* Save Button */}
-          <Button
-            type="submit"
-            className="w-full bg-red-600 hover:bg-red-700 text-white py-3 text-lg font-semibold mt-8" // Adjusted padding/margin
-            disabled={updateProfileMutation.isPending || uploadingImage || uploadingPortfolio} // Disable while saving or uploading
-          >
-            <Save className="w-5 h-5 mr-2" />
-            {updateProfileMutation.isPending ? "保存中..." : "プロフィールを保存"}
-          </Button>
+          {/* Save Button - 自分のプロフィールの場合のみ表示 */}
+          {isOwnProfile && (
+            <Button
+              type="submit"
+              className="w-full bg-red-600 hover:bg-red-700 text-white py-3 text-lg font-semibold mt-8"
+              disabled={updateProfileMutation.isPending || uploadingImage || uploadingPortfolio}
+            >
+              <Save className="w-5 h-5 mr-2" />
+              {updateProfileMutation.isPending ? "保存中..." : "プロフィールを保存"}
+            </Button>
+          )}
         </form>
 
          {/* Image Cropper Modal */}
