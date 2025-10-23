@@ -110,9 +110,11 @@ export default function Profile() {
         const client = generateClient();
         const userDataResult = await client.graphql({
           query: getUser,
-          variables: { id: userId }
+          variables: { id: userId },
+          authMode: 'userPool' // Cognito User Pools認証を使用
         });
         const appUser = userDataResult.data.getUser;
+        console.log("Fetched appUser from DB:", appUser);
 
         if (appUser) {
           setUser({ ...attributes, ...appUser }); // Combine Cognito attrs and DB data
@@ -255,6 +257,8 @@ export default function Profile() {
 
       console.log("Starting profile save with cognitoSub:", cognitoSub);
       console.log("Profile data received:", profileData);
+      console.log("Current user state:", user);
+      console.log("Current user._version:", user?._version);
 
       // Prepare data for GraphQL mutation (exclude fields not in schema if necessary)
       const inputData = {
@@ -275,9 +279,16 @@ export default function Profile() {
         twitter_url: profileData.twitter_url || null,
         youtube_url: profileData.youtube_url || null,
         special_conditions: profileData.special_conditions,
-        is_accepting_requests: profileData.is_accepting_requests,
-        _version: user?._version // DynamoDBのOptimistic Lockingに必要
+        is_accepting_requests: profileData.is_accepting_requests
       };
+      
+      // _versionがある場合のみ追加（初回作成時は不要）
+      if (user?._version) {
+        inputData._version = user._version;
+        console.log("Adding _version to inputData:", user._version);
+      } else {
+        console.warn("⚠️ _version not found in user state. This might be the first save or user data not loaded.");
+      }
        // Remove null fields if your schema doesn't accept them explicitly for updates
        // Object.keys(inputData).forEach(key => (inputData[key] === null) && delete inputData[key]);
 
