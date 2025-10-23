@@ -79,7 +79,8 @@ export default function HomeForRegister() {
         const client = generateClient();
         const result = await client.graphql({
           query: listUsers,
-          variables: { filter: apiFilters }
+          variables: { filter: apiFilters },
+          authMode: 'userPool' // Cognito User Pools認証を使用
         });
         console.log("GraphQL Result:", result);
         return result.data?.listUsers?.items || [];

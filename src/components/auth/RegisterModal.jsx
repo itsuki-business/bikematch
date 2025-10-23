@@ -183,7 +183,8 @@ export default function RegisterModal({ isOpen, onClose, onSuccess }) {
               average_rating: 0,
               review_count: 0
             }
-          }
+          },
+          authMode: 'userPool' // Cognito User Pools認証を使用
         });
         console.log('User record created successfully in DB');
       } catch (dbError) {

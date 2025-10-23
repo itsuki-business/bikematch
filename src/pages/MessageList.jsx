@@ -65,7 +65,8 @@ export default function MessageList() {
                 { photographer_id: { eq: currentUserId } }
               ]
             }
-          }
+          },
+          authMode: 'userPool' // Cognito User Pools認証を使用
         });
         
         const convs = result.data?.listConversations?.items || [];

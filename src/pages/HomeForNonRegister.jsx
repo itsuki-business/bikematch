@@ -24,7 +24,8 @@ export default function HomeForNonRegister() {
               user_type: { eq: 'photographer' },
               is_accepting_requests: { eq: true }
             }
-          }
+          },
+          authMode: 'apiKey' // 非認証ユーザー向けにAPI_KEYを使用
         });
         return (result.data?.listUsers?.items || []).slice(0, 3);
       } catch (error) {

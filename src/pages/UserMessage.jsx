@@ -53,7 +53,8 @@ export default function UserMessage() {
       const client = generateClient();
       const result = await client.graphql({
         query: getUser,
-        variables: { id: otherUserId }
+        variables: { id: otherUserId },
+        authMode: 'userPool' // Cognito User Pools認証を使用
       });
       return result.data.getUser;
     },
@@ -76,7 +77,8 @@ export default function UserMessage() {
               { and: [{ biker_id: { eq: otherUserId } }, { photographer_id: { eq: currentUserId } }] }
             ]
           }
-        }
+        },
+        authMode: 'userPool' // Cognito User Pools認証を使用
       });
       
       const conversations = result.data?.listConversations?.items || [];
@@ -97,7 +99,8 @@ export default function UserMessage() {
         variables: {
           conversationID: existingConversation.id,
           sortDirection: 'ASC'
-        }
+        },
+        authMode: 'userPool' // Cognito User Pools認証を使用
       });
       
       return result.data?.messagesByConversationIDAndCreatedAt?.items || [];
@@ -126,7 +129,8 @@ export default function UserMessage() {
       
       const result = await client.graphql({
         query: createConversation,
-        variables: { input: conversationData }
+        variables: { input: conversationData },
+        authMode: 'userPool' // Cognito User Pools認証を使用
       });
       
       return result.data.createConversation;
@@ -159,7 +163,8 @@ export default function UserMessage() {
       
       const result = await client.graphql({
         query: createMessage,
-        variables: { input: messageInput }
+        variables: { input: messageInput },
+        authMode: 'userPool' // Cognito User Pools認証を使用
       });
       
       // 会話の最終メッセージを更新
@@ -171,7 +176,8 @@ export default function UserMessage() {
             last_message: messageData.content,
             last_message_at: new Date().toISOString()
           }
-        }
+        },
+        authMode: 'userPool' // Cognito User Pools認証を使用
       });
       
       return result.data.createMessage;

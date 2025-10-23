@@ -206,7 +206,8 @@ export default function Profile() {
           variables: {
             filter: { photographer_id: { eq: cognitoSub } } // Filter by user ID
             // limit: MAX_PORTFOLIO_IMAGES // Optional: Limit results if needed
-          }
+          },
+          authMode: 'userPool' // Cognito User Pools認証を使用
         });
         return result.data?.listPortfolios?.items || [];
         // -----------------------------
@@ -271,7 +272,8 @@ export default function Profile() {
       console.log("Updating user profile...");
       const result = await client.graphql({
         query: updateUser,
-        variables: { input: inputData }
+        variables: { input: inputData },
+        authMode: 'userPool' // Cognito User Pools認証を使用
       });
       console.log("Update successful:", result);
       return result.data.updateUser;
@@ -332,7 +334,8 @@ export default function Profile() {
       const client = generateClient();
       const result = await client.graphql({
         query: createPortfolio,
-        variables: { input: inputData }
+        variables: { input: inputData },
+        authMode: 'userPool' // Cognito User Pools認証を使用
       });
       return result.data.createPortfolio;
       // -----------------------------
@@ -373,7 +376,8 @@ export default function Profile() {
        const client = generateClient();
        const result = await client.graphql({
          query: deletePortfolio,
-         variables: { input: inputData }
+         variables: { input: inputData },
+         authMode: 'userPool' // Cognito User Pools認証を使用
        });
        // Optionally delete the S3 object associated with itemToDelete.image_key here
        // try { await Storage.remove(itemToDelete.image_key); } catch (e) { console.warn("S3 delete failed", e); }

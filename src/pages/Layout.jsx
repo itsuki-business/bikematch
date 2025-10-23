@@ -105,7 +105,7 @@ export default function Layout({ children, currentPageName }) {
     }
     try {
       const client = generateClient();
-      const result = await client.graphql({ query: getUser, variables: { id: userId } });
+      const result = await client.graphql({ query: getUser, variables: { id: userId }, authMode: 'userPool' });
       const fetchedUser = result.data.getUser;
       console.log('fetchAppUserData - fetched user:', fetchedUser);
       if (fetchedUser) {
