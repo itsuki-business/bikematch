@@ -1,0 +1,131 @@
+# ---------------------------------------------------------------------------------------------
+# --- BikeMatch GraphQL Schema ---
+# ---------------------------------------------------------------------------------------------
+
+# --- ユーザーモデル ---
+type User
+  @model
+  @auth(rules: [
+    { allow: private, operations: [read, create, update, delete] }
+  ])
+{
+  id: ID! # Cognitoのsubと同じID
+  email: String! 
+  nickname: String
+  user_type: UserType
+  prefecture: String
+  bike_maker: String
+  bike_model: String
+  shooting_genres: [String]
+  price_range_min: Int
+  price_range_max: Int
+  equipment: String
+  bio: String
+  profile_image: String # S3キー
+  portfolio_website: String
+  instagram_url: String
+  twitter_url: String
+  youtube_url: String
+  special_conditions: [String]
+  is_accepting_requests: Boolean
+  average_rating: Float
+  review_count: Int
+  _version: Int!
+  _deleted: Boolean
+  _lastChangedAt: AWSTimestamp
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  reviewsGiven: [Review] @hasMany(indexName: "byReviewer", fields: ["id"])
+  reviewsReceived: [Review] @hasMany(indexName: "byReviewee", fields: ["id"])
+  portfolioItems: [Portfolio] @hasMany(indexName: "byPhotographerUser", fields: ["id"])
+  conversationsAsBiker: [Conversation] @hasMany(indexName: "byBiker", fields: ["id"])
+  conversationsAsPhotographer: [Conversation] @hasMany(indexName: "byPhotographerConv", fields: ["id"])
+}
+
+enum UserType {
+  rider
+  photographer
+}
+
+# --- 会話モデル ---
+type Conversation
+  @model
+  @auth(rules: [
+    { allow: private, operations: [read, create, update, delete] }
+  ])
+{
+  id: ID!
+  biker_id: ID! @index(name: "byBiker", sortKeyFields: ["last_message_at"])
+  photographer_id: ID! @index(name: "byPhotographerConv", sortKeyFields: ["last_message_at"])
+  biker_name: String
+  photographer_name: String
+  last_message: String
+  last_message_at: AWSDateTime
+  status: String
+  _version: Int!
+  _deleted: Boolean
+  _lastChangedAt: AWSTimestamp
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  messages: [Message] @hasMany(indexName: "byConversation", fields: ["id"])
+}
+
+# --- メッセージモデル ---
+type Message
+  @model
+  @auth(rules: [
+    { allow: private, operations: [read, create, update, delete] }
+  ])
+{
+  id: ID!
+  conversationID: ID! @index(name: "byConversation", sortKeyFields: ["createdAt"])
+  sender_id: ID! @index(name: "bySender", sortKeyFields: ["createdAt"])
+  content: String
+  media_key: String # S3キー
+  media_type: String # "image" or "video"
+  is_read: Boolean
+  _version: Int!
+  _deleted: Boolean
+  _lastChangedAt: AWSTimestamp
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+# --- ポートフォリオモデル ---
+type Portfolio
+  @model
+  @auth(rules: [
+    { allow: private, operations: [read, create, update, delete] }
+  ])
+{
+  id: ID!
+  photographer_id: ID! @index(name: "byPhotographerUser")
+  image_key: String! # S3キー
+  title: String
+  description: String
+  _version: Int!
+  _deleted: Boolean
+  _lastChangedAt: AWSTimestamp
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+# --- レビューモデル ---
+type Review
+  @model
+  @auth(rules: [
+    { allow: private, operations: [read, create, update, delete] }
+  ])
+{
+  id: ID!
+  reviewer_id: ID! @index(name: "byReviewer", sortKeyFields: ["createdAt"])
+  reviewee_id: ID! @index(name: "byReviewee", sortKeyFields: ["createdAt"])
+  conversation_id: ID
+  rating: Int! # 1-5
+  comment: String
+  _version: Int!
+  _deleted: Boolean
+  _lastChangedAt: AWSTimestamp
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}

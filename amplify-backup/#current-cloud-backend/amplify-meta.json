@@ -1,0 +1,115 @@
+{
+  "providers": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-bikematch-devsecond-660f7-authRole",
+      "UnauthRoleArn": "arn:aws:iam::895843087873:role/amplify-bikematch-devsecond-660f7-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::895843087873:role/amplify-bikematch-devsecond-660f7-authRole",
+      "Region": "ap-northeast-1",
+      "DeploymentBucketName": "amplify-bikematch-devsecond-660f7-deployment",
+      "UnauthRoleName": "amplify-bikematch-devsecond-660f7-unauthRole",
+      "StackName": "amplify-bikematch-devsecond-660f7",
+      "StackId": "arn:aws:cloudformation:ap-northeast-1:895843087873:stack/amplify-bikematch-devsecond-660f7/52bd4a40-afaf-11f0-865f-0ed35d07c215",
+      "AmplifyAppId": "d1snnfnibksqum"
+    }
+  },
+  "api": {
+    "bikematch": {
+      "dependsOn": [
+        {
+          "attributes": [
+            "UserPoolId"
+          ],
+          "category": "auth",
+          "resourceName": "bikematchdf804b56"
+        }
+      ],
+      "output": {
+        "authConfig": {
+          "additionalAuthenticationProviders": [
+            {
+              "authenticationType": "AMAZON_COGNITO_USER_POOLS",
+              "userPoolConfig": {
+                "userPoolId": "authbikematchdf804b56"
+              }
+            }
+          ],
+          "defaultAuthentication": {
+            "apiKeyConfig": {
+              "apiKeyExpirationDays": 7
+            },
+            "authenticationType": "API_KEY"
+          }
+        },
+        "GraphQLAPIIdOutput": "ueplwzkyafh5rhdejtsjyian7a",
+        "GraphQLAPIEndpointOutput": "https://ctfvjknfgfh77jftfkruyvw4bq.appsync-api.ap-northeast-1.amazonaws.com/graphql",
+        "GraphQLAPIKeyOutput": "da2-3q547a5p2bewvdgy62p7rutwjm"
+      },
+      "providerPlugin": "awscloudformation",
+      "service": "AppSync",
+      "lastPushTimeStamp": "2025-10-23T20:57:55.917Z",
+      "providerMetadata": {
+        "s3TemplateURL": "https://s3.amazonaws.com/amplify-bikematch-devsecond-660f7-deployment/amplify-cfn-templates/api/cloudformation-template.json",
+        "logicalId": "apibikematch"
+      },
+      "lastPushDirHash": "GuQIZIOrix8ns0+vL14Bur60oV8="
+    }
+  },
+  "auth": {
+    "bikematchdf804b56": {
+      "customAuth": false,
+      "dependsOn": [],
+      "frontendAuthConfig": {
+        "mfaConfiguration": "OFF",
+        "mfaTypes": [
+          "SMS"
+        ],
+        "passwordProtectionSettings": {
+          "passwordPolicyMinLength": 8,
+          "passwordPolicyCharacters": []
+        },
+        "signupAttributes": [
+          "EMAIL"
+        ],
+        "socialProviders": [],
+        "usernameAttributes": [
+          "EMAIL"
+        ],
+        "verificationMechanisms": [
+          "EMAIL"
+        ]
+      },
+      "providerPlugin": "awscloudformation",
+      "service": "Cognito",
+      "output": {
+        "UserPoolId": "ap-northeast-1_UMqmALK7z",
+        "AppClientIDWeb": "6jsffb3fjfa5344f08mlbmeeh4",
+        "AppClientID": "3kdv5618adq5pqnbai517r2k4r",
+        "IdentityPoolId": "ap-northeast-1:74c2f135-46d4-46a9-9695-df23f75e369c",
+        "UserPoolArn": "arn:aws:cognito-idp:ap-northeast-1:895843087873:userpool/ap-northeast-1_UMqmALK7z",
+        "IdentityPoolName": "bikematchdf804b56_identitypool_df804b56__devsecond",
+        "UserPoolName": "bikematchdf804b56_userpool_df804b56"
+      },
+      "lastPushTimeStamp": "2025-10-23T20:57:53.176Z",
+      "providerMetadata": {
+        "s3TemplateURL": "https://s3.amazonaws.com/amplify-bikematch-devsecond-660f7-deployment/amplify-cfn-templates/auth/bikematchdf804b56-cloudformation-template.json",
+        "logicalId": "authbikematchdf804b56"
+      }
+    }
+  },
+  "storage": {
+    "bikematch": {
+      "dependsOn": [],
+      "providerPlugin": "awscloudformation",
+      "service": "S3",
+      "output": {
+        "BucketName": "bikematch55f20599246847589885114a016c3e4e660f7-devsecond",
+        "Region": "ap-northeast-1"
+      },
+      "lastPushTimeStamp": "2025-10-23T20:57:53.259Z",
+      "providerMetadata": {
+        "s3TemplateURL": "https://s3.amazonaws.com/amplify-bikematch-devsecond-660f7-deployment/amplify-cfn-templates/storage/cloudformation-template.json",
+        "logicalId": "storagebikematch"
+      }
+    }
+  }
+}
