@@ -275,8 +275,8 @@ export default function Profile() {
         twitter_url: profileData.twitter_url || null,
         youtube_url: profileData.youtube_url || null,
         special_conditions: profileData.special_conditions,
-        is_accepting_requests: profileData.is_accepting_requests
-        // Add _version if using conflict detection with AppSync
+        is_accepting_requests: profileData.is_accepting_requests,
+        _version: user?._version // DynamoDBのOptimistic Lockingに必要
       };
        // Remove null fields if your schema doesn't accept them explicitly for updates
        // Object.keys(inputData).forEach(key => (inputData[key] === null) && delete inputData[key]);
@@ -309,7 +309,7 @@ export default function Profile() {
     },
     onSuccess: (updatedUserData) => {
       setSuccessMessage("プロフィールを更新しました");
-      // Update local state immediately for better UX
+      // Update local state immediately for better UX (including _version for next update)
       setUser(prev => ({ ...prev, ...updatedUserData }));
       setFormData(prev => ({ ...prev, ...updatedUserData })); // Update form too in case some fields were transformed
       // If profile image key changed, refetch URL
@@ -366,7 +366,7 @@ export default function Profile() {
     },
     onSuccess: (newPortfolioItem) => {
       // Invalidate portfolio query to refetch
-      queryClient.invalidateQueries({ queryKey: ['portfolio', cognitoSub] });
+      queryClient.invalidateQueries({ queryKey: ['my-portfolio', cognitoSub] });
        setSuccessMessage("ポートフォリオ画像を追加しました。");
        setTimeout(() => setSuccessMessage(""), 2000);
     },
@@ -390,7 +390,7 @@ export default function Profile() {
 
        const inputData = {
            id: portfolioId,
-           // _version: itemToDelete._version // Include if using conflict detection
+           _version: itemToDelete._version // Include for conflict detection
        };
        const client = generateClient();
        const result = await client.graphql({
@@ -418,7 +418,7 @@ export default function Profile() {
     onSuccess: (deletedItem) => {
         console.log("Deleted portfolio:", deletedItem?.id);
         // Invalidate portfolio query to refetch
-        queryClient.invalidateQueries({ queryKey: ['portfolio', cognitoSub] });
+        queryClient.invalidateQueries({ queryKey: ['my-portfolio', cognitoSub] });
         setSuccessMessage("ポートフォリオ画像を削除しました。");
         setTimeout(() => setSuccessMessage(""), 2000);
     },
