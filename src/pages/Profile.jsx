@@ -209,7 +209,26 @@ export default function Profile() {
           },
           authMode: 'userPool' // Cognito User Pools認証を使用
         });
-        return result.data?.listPortfolios?.items || [];
+        
+        const items = result.data?.listPortfolios?.items || [];
+        
+        // S3キーから署名付きURLを取得
+        const itemsWithUrls = await Promise.all(
+          items.map(async (item) => {
+            let imageUrl = null;
+            if (item.image_key) {
+              try {
+                const urlResult = await getUrl({ key: item.image_key });
+                imageUrl = urlResult.url.toString();
+              } catch (error) {
+                console.error(`Error fetching URL for ${item.image_key}:`, error);
+              }
+            }
+            return { ...item, imageUrl };
+          })
+        );
+        
+        return itemsWithUrls;
         // -----------------------------
 
         // --- DataStoreの場合 ---
@@ -985,7 +1004,7 @@ export default function Profile() {
                               src={item.imageUrl || `https://via.placeholder.com/150?text=Loading...`} // Placeholder while URL loads
                               alt={item.title || "ポートフォリオ画像"}
                               className="w-full h-full object-cover rounded-lg bg-gray-100" // Add bg for loading
-                              // onLoad={(e) => { /* Handle loaded state if needed */ }}
+                              // onLoad={(e) => { /* Handle loaded state if \ */ }}
                               onError={(e) => { e.target.src = 'https://via.placeholder.com/150?text=Error'; }} // Simple error placeholder
                               />
                           )}
