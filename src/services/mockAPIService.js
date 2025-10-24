@@ -83,6 +83,8 @@ class MockAPIService {
 
   // Mock create user
   mockCreateUser(input) {
+    console.log('mockCreateUser called with input:', input);
+    
     const user = {
       id: input.id,
       email: input.email,
@@ -110,8 +112,12 @@ class MockAPIService {
       _version: 1
     };
     
+    console.log('mockCreateUser created user:', user);
+    
     this.users.set(input.id, user);
     this.saveToStorage(); // データを永続化
+    
+    console.log('mockCreateUser - users Map after save:', Array.from(this.users.entries()));
     
     return {
       data: {

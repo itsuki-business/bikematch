@@ -90,14 +90,14 @@ export default function FirstTimeProfileSetup() {
           cognitoUser = await mockAuthService.getCurrentUser();
           attributes = await mockAuthService.fetchUserAttributes();
           console.log('Mock user data:', cognitoUser, attributes);
-          setCognitoSub(cognitoUser.userId);
+          setCognitoSub(cognitoUser.generatedId || cognitoUser.userId);
           // Mock環境ではメールアドレスを正しく設定
           setUserEmail(attributes.email || cognitoUser.username || 'test@example.com');
         } else {
           cognitoUser = await getCurrentUser();
           attributes = await fetchUserAttributes();
           console.log('Production user data:', cognitoUser, attributes);
-          setCognitoSub(cognitoUser.userId);
+          setCognitoSub(cognitoUser.userId || cognitoUser.attributes?.sub);
           setUserEmail(attributes.email || '');
         }
         
@@ -132,6 +132,7 @@ export default function FirstTimeProfileSetup() {
 
       const inputData = {
         id: cognitoSub,
+        email: userEmail, // メールアドレスを追加
         user_type: profileData.user_type || null,
         nickname: profileData.nickname,
         prefecture: profileData.prefecture || null,
@@ -152,6 +153,8 @@ export default function FirstTimeProfileSetup() {
         average_rating: 0,
         review_count: 0
       };
+      
+      console.log('FirstTimeProfileSetup - Creating user with inputData:', inputData);
 
        let result;
        if (useMock) {

@@ -71,15 +71,36 @@ export default function Layout({ children, currentPageName }) {
 
   useEffect(() => {
     if (cognitoUser) {
-      // cognitoUserが存在すれば、appUserの有無に関わらずuserをセット
-      const userData = {
-        id: cognitoUser.username || cognitoUser.userId || cognitoUser.attributes?.sub,
-        username: cognitoUser.username || cognitoUser.userId,
-        email: cognitoUser.attributes?.email,
-        ...appUser, // appUserがあれば追加情報をマージ
+      console.log('Layout [Debug] - cognitoUser:', cognitoUser);
+      console.log('Layout [Debug] - appUser (from DynamoDB):', appUser);
+      
+      // Cognitoから必須情報を安全に抽出
+      const cognitoSub = cognitoUser.generatedId || cognitoUser.userId || cognitoUser.attributes?.sub;
+      const cognitoEmail = cognitoUser.attributes?.email;
+      const cognitoUsername = cognitoUser.username;
+      
+      if (!cognitoSub) {
+        console.error('Layout [Error] - Cognito sub (userId) is missing!');
+        setIsLoadingUser(false);
+        return;
+      }
+      
+      // appUser (DynamoDB) のデータをベースにマージ
+      const mergedUser = {
+        ...appUser, // DynamoDBの全情報 (nickname, user_type, prefecture...) を先に展開
+        ...cognitoUser.attributes, // Cognitoの属性 (name...) を展開
+        
+        // Cognitoからの必須情報で「確定的に上書き」
+        id: cognitoSub,         // ★最重要: idはCognito subで確定
+        username: cognitoUsername, // Cognitoのログイン名 (通常はemail)
+        email: cognitoEmail,       // Cognitoのemail属性
+        
+        // 注意: これで nickname は appUser.nickname が採用され、
+        // appUserが未取得(null)の場合は nickname: undefined となる
       };
-      console.log('Layout - Setting user data:', userData);
-      setUser(userData);
+      
+      console.log('Layout [Debug] - Setting merged user data:', mergedUser);
+      setUser(mergedUser);
       setIsLoadingUser(false);
     } else {
       console.log('Layout - No cognitoUser, setting user to null');
@@ -99,7 +120,11 @@ export default function Layout({ children, currentPageName }) {
         console.log('checkCurrentUser - production current user:', current);
       }
       setCognitoUser(current);
-      await fetchAppUserData(current.username || current.userId);
+      
+      // Cognitoのsubを優先してfetchAppUserDataに渡す
+      const userId = current.generatedId || current.userId || current.attributes?.sub || current.username;
+      console.log('checkCurrentUser - using userId for fetchAppUserData:', userId);
+      await fetchAppUserData(userId);
     } catch (error) {
       console.log('checkCurrentUser - not authenticated:', error);
       setCognitoUser(null);
@@ -318,12 +343,12 @@ export default function Layout({ children, currentPageName }) {
                 <div className="flex items-center gap-3 px-2">
                    <div className="w-10 h-10 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center overflow-hidden">
                        <span className="text-gray-700 font-semibold text-sm">
-                       {user.nickname?.[0]?.toUpperCase() || user.name?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || 'U'}
+                       {user.nickname?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || 'U'}
                        </span>
                    </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900 text-sm truncate">
-                      {user.nickname || user.name || user.email}
+                      {user.nickname || user.email || 'ユーザー'}
                     </p>
                     <p className="text-xs text-gray-500 truncate">{user.email}</p>
                   </div>
