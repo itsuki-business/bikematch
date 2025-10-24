@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useMock } from '@/config/environment';
+import mockAuthService from '@/services/mockAuthService';
+import mockAPIService from '@/services/mockAPIService';
 import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/api';
 import { listConversations, getUser, messagesByConversationIDAndCreatedAt } from '@/graphql/queries';
@@ -9,10 +12,12 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Send } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, Send, User, MapPin, Camera } from "lucide-react";
 import MessageBubble from "../components/messages/MessageBubble";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
+import { motion } from "framer-motion";
 
 export default function UserMessage() {
   const navigate = useNavigate();
@@ -27,8 +32,15 @@ export default function UserMessage() {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const cognitoUser = await getCurrentUser();
-        const attributes = await fetchUserAttributes();
+        let cognitoUser, attributes;
+        if (useMock) {
+          cognitoUser = await mockAuthService.getCurrentUser();
+          attributes = await mockAuthService.fetchUserAttributes();
+        } else {
+          cognitoUser = await getCurrentUser();
+          attributes = await fetchUserAttributes();
+        }
+        
         const userId = cognitoUser.userId;
         setCurrentUser({ userId, attributes });
         setCurrentUserId(userId);
@@ -50,13 +62,24 @@ export default function UserMessage() {
   const { data: targetUser, isLoading: targetUserLoading } = useQuery({
     queryKey: ['user', otherUserId],
     queryFn: async () => {
-      const client = generateClient();
-      const result = await client.graphql({
-        query: getUser,
-        variables: { id: otherUserId },
-        authMode: 'userPool' // Cognito User Pools認証を使用
-      });
-      return result.data.getUser;
+      if (useMock) {
+        // Mock環境ではダミーユーザー情報を返す
+        return {
+          id: otherUserId,
+          nickname: 'サンプルユーザー',
+          prefecture: '東京都',
+          user_type: 'photographer',
+          bio: 'バイク撮影を専門としています。'
+        };
+      } else {
+        const client = generateClient();
+        const result = await client.graphql({
+          query: getUser,
+          variables: { id: otherUserId },
+          authMode: 'userPool' // Cognito User Pools認証を使用
+        });
+        return result.data.getUser;
+      }
     },
     enabled: !!otherUserId
   });
@@ -67,22 +90,27 @@ export default function UserMessage() {
     queryFn: async () => {
       if (!currentUserId || !otherUserId) return null;
       
-      const client = generateClient();
-      const result = await client.graphql({
-        query: listConversations,
-        variables: {
-          filter: {
-            or: [
-              { and: [{ biker_id: { eq: currentUserId } }, { photographer_id: { eq: otherUserId } }] },
-              { and: [{ biker_id: { eq: otherUserId } }, { photographer_id: { eq: currentUserId } }] }
-            ]
-          }
-        },
-        authMode: 'userPool' // Cognito User Pools認証を使用
-      });
-      
-      const conversations = result.data?.listConversations?.items || [];
-      return conversations.length > 0 ? conversations[0] : null;
+      if (useMock) {
+        // Mock環境では会話なしとして扱う
+        return null;
+      } else {
+        const client = generateClient();
+        const result = await client.graphql({
+          query: listConversations,
+          variables: {
+            filter: {
+              or: [
+                { and: [{ biker_id: { eq: currentUserId } }, { photographer_id: { eq: otherUserId } }] },
+                { and: [{ biker_id: { eq: otherUserId } }, { photographer_id: { eq: currentUserId } }] }
+              ]
+            }
+          },
+          authMode: 'userPool' // Cognito User Pools認証を使用
+        });
+        
+        const conversations = result.data?.listConversations?.items || [];
+        return conversations.length > 0 ? conversations[0] : null;
+      }
     },
     enabled: !!currentUserId && !!otherUserId
   });
@@ -93,17 +121,22 @@ export default function UserMessage() {
     queryFn: async () => {
       if (!existingConversation) return [];
       
-      const client = generateClient();
-      const result = await client.graphql({
-        query: messagesByConversationIDAndCreatedAt,
-        variables: {
-          conversationID: existingConversation.id,
-          sortDirection: 'ASC'
-        },
-        authMode: 'userPool' // Cognito User Pools認証を使用
-      });
-      
-      return result.data?.messagesByConversationIDAndCreatedAt?.items || [];
+      if (useMock) {
+        // Mock環境では空の配列を返す
+        return [];
+      } else {
+        const client = generateClient();
+        const result = await client.graphql({
+          query: messagesByConversationIDAndCreatedAt,
+          variables: {
+            conversationID: existingConversation.id,
+            sortDirection: 'ASC'
+          },
+          authMode: 'userPool' // Cognito User Pools認証を使用
+        });
+        
+        return result.data?.messagesByConversationIDAndCreatedAt?.items || [];
+      }
     },
     enabled: !!existingConversation,
     refetchInterval: 5000 // 5秒ごとに更新
@@ -230,69 +263,122 @@ export default function UserMessage() {
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white py-8">
       <div className="max-w-4xl mx-auto px-4 md:px-8">
         {/* ヘッダー */}
-        <div className="flex items-center gap-4 mb-6">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="flex items-center gap-4 mb-6"
+        >
           <Button
             variant="ghost"
             size="icon"
             onClick={() => navigate(`/messages/${currentUserId}`)}
+            className="hover:bg-gray-100 rounded-full"
           >
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              {targetUser.nickname || 'ユーザー'}
-            </h1>
-            <p className="text-sm text-gray-500">
-              {targetUser.prefecture} · {targetUser.user_type === 'photographer' ? 'フォトグラファー' : 'ライダー'}
-            </p>
+          <div className="flex items-center gap-4 flex-1">
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-lg">
+              {targetUser?.nickname ? targetUser.nickname.charAt(0) : 'U'}
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-1">
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {targetUser?.nickname || 'ユーザー'}
+                </h1>
+                <Badge variant={targetUser?.user_type === 'photographer' ? 'default' : 'secondary'}>
+                  {targetUser?.user_type === 'photographer' ? 'フォトグラファー' : 'ライダー'}
+                </Badge>
+              </div>
+              <div className="flex items-center gap-4 text-sm text-gray-500">
+                <div className="flex items-center gap-1">
+                  <MapPin className="w-4 h-4" />
+                  <span>{targetUser?.prefecture || '未設定'}</span>
+                </div>
+                {targetUser?.user_type === 'photographer' && (
+                  <div className="flex items-center gap-1">
+                    <Camera className="w-4 h-4" />
+                    <span>撮影可能</span>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* メッセージエリア */}
-        <Card className="shadow-lg border-none mb-6">
-          <CardContent className="p-6">
-            <div className="h-[500px] overflow-y-auto mb-4 space-y-4">
-              {messagesLoading ? (
-                <div className="text-center text-gray-500">読み込み中...</div>
-              ) : messages.length === 0 ? (
-                <div className="text-center text-gray-500 py-12">
-                  <p className="mb-2">まだメッセージはありません</p>
-                  <p className="text-sm">最初のメッセージを送信してみましょう</p>
-                </div>
-              ) : (
-                <>
-                  {messages.map((message) => (
-                    <MessageBubble
-                      key={message.id}
-                      message={message}
-                      isOwnMessage={message.sender_id === currentUserId}
-                    />
-                  ))}
-                  <div ref={messagesEndRef} />
-                </>
-              )}
-            </div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+        >
+          <Card className="shadow-xl border-none rounded-2xl overflow-hidden">
+            <CardContent className="p-0">
+              <div className="h-[500px] overflow-y-auto p-6 space-y-4 bg-gray-50">
+                {messagesLoading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                      <p className="text-gray-500">読み込み中...</p>
+                    </div>
+                  </div>
+                ) : messages.length === 0 ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <div className="w-16 h-16 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <User className="w-8 h-8 text-gray-400" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">まだメッセージはありません</h3>
+                      <p className="text-gray-600">最初のメッセージを送信してみましょう</p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {messages.map((message, index) => (
+                      <motion.div
+                        key={message.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3, delay: index * 0.05 }}
+                      >
+                        <MessageBubble
+                          message={message}
+                          isOwnMessage={message.sender_id === currentUserId}
+                        />
+                      </motion.div>
+                    ))}
+                    <div ref={messagesEndRef} />
+                  </>
+                )}
+              </div>
 
-            {/* メッセージ入力フォーム */}
-            <form onSubmit={handleSendMessage} className="flex gap-2">
-              <Textarea
-                value={messageContent}
-                onChange={(e) => setMessageContent(e.target.value)}
-                placeholder="メッセージを入力..."
-                className="flex-1 resize-none"
-                rows={2}
-                disabled={sendMessageMutation.isPending}
-              />
-              <Button
-                type="submit"
-                disabled={!messageContent.trim() || sendMessageMutation.isPending}
-                className="bg-red-600 hover:bg-red-700"
-              >
-                <Send className="w-5 h-5" />
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+              {/* メッセージ入力フォーム */}
+              <div className="p-6 bg-white border-t">
+                <form onSubmit={handleSendMessage} className="flex gap-3">
+                  <Textarea
+                    value={messageContent}
+                    onChange={(e) => setMessageContent(e.target.value)}
+                    placeholder="メッセージを入力..."
+                    className="flex-1 resize-none border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    rows={2}
+                    disabled={sendMessageMutation.isPending}
+                  />
+                  <Button
+                    type="submit"
+                    disabled={!messageContent.trim() || sendMessageMutation.isPending}
+                    className="bg-red-600 hover:bg-red-700 px-6 py-2 rounded-lg"
+                  >
+                    {sendMessageMutation.isPending ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Send className="w-5 h-5" />
+                    )}
+                  </Button>
+                </form>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
       </div>
     </div>
   );

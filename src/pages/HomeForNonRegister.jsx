@@ -17,6 +17,18 @@ import { getCurrentUser } from 'aws-amplify/auth';
 export default function HomeForNonRegister() {
   const navigate = useNavigate();
 
+  // 開発用：Mock環境で認証状態をリセットする関数をグローバルに公開
+  useEffect(() => {
+    if (useMock && typeof window !== 'undefined') {
+      window.resetMockAuth = () => {
+        mockAuthService.resetMockData();
+        console.log('Mock auth data reset. Please refresh the page.');
+        window.location.reload();
+      };
+      console.log('Development: Call window.resetMockAuth() to reset mock authentication state');
+    }
+  }, []);
+
   // 認証状態をチェック
   useEffect(() => {
     const checkAuth = async () => {
@@ -24,16 +36,23 @@ export default function HomeForNonRegister() {
         let cognitoUser;
         if (useMock) {
           cognitoUser = await mockAuthService.getCurrentUser();
+          // Mock環境では、isAuthenticatedフラグも確認
+          const isAuthenticated = mockAuthService.isAuthenticated;
+          console.log('HomeForNonRegister - Mock auth state:', { cognitoUser, isAuthenticated });
+          
+          if (cognitoUser && cognitoUser.userId && isAuthenticated) {
+            console.log('HomeForNonRegister - Redirecting authenticated mock user to /home-for-register');
+            navigate('/home-for-register');
+          }
         } else {
           cognitoUser = await getCurrentUser();
-        }
-        
-        console.log('HomeForNonRegister - User is authenticated:', cognitoUser);
-        
-        // 認証済みユーザーは home-for-register にリダイレクト
-        if (cognitoUser && cognitoUser.userId) {
-          console.log('HomeForNonRegister - Redirecting authenticated user to /home-for-register');
-          navigate('/home-for-register');
+          console.log('HomeForNonRegister - User is authenticated:', cognitoUser);
+          
+          // 認証済みユーザーは home-for-register にリダイレクト
+          if (cognitoUser && cognitoUser.userId) {
+            console.log('HomeForNonRegister - Redirecting authenticated user to /home-for-register');
+            navigate('/home-for-register');
+          }
         }
       } catch (error) {
         console.log('HomeForNonRegister - User is not authenticated:', error);

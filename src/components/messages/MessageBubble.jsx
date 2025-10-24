@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { format, isDate } from "date-fns";
 import { ja } from "date-fns/locale";
-// --- Amplify v6 ---
+import { useMock } from '@/config/environment';
 import { getUrl } from 'aws-amplify/storage';
-// ---------------
-import { Image as ImageIcon, Video as VideoIcon, Loader2 } from "lucide-react";
+import { Image as ImageIcon, Video as VideoIcon, Loader2, Clock } from "lucide-react";
+import { motion } from "framer-motion";
 
 // S3 URL取得ヘルパー (共通化推奨)
 const s3UrlCacheBubble = new Map();
@@ -24,7 +24,7 @@ const getMediaUrl = async (key) => {
     }
 };
 
-export default function MessageBubble({ message, isOwn }) {
+export default function MessageBubble({ message, isOwnMessage }) {
     const [mediaUrl, setMediaUrl] = useState(null);
     const [isLoadingMedia, setIsLoadingMedia] = useState(false);
     const [hasMediaError, setHasMediaError] = useState(false); // エラー状態を追加
@@ -37,7 +37,7 @@ export default function MessageBubble({ message, isOwn }) {
         setIsLoadingMedia(false); // Reset loading state
 
         // media_key が存在する場合のみURL取得を試みる
-        if (message.media_key) {
+        if (message.media_key && !useMock) {
             setIsLoadingMedia(true);
             getMediaUrl(message.media_key).then(url => {
                  if (isMounted) {
@@ -63,24 +63,28 @@ export default function MessageBubble({ message, isOwn }) {
     const messageDate = message.createdAt || message.created_date ? new Date(message.createdAt || message.created_date) : null;
 
   return (
-    <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} group mb-2`}> {/* Added mb-2 */}
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mb-4`}
+    >
       <div
-        className={`relative max-w-[75%] md:max-w-[65%] rounded-xl px-3 py-1.5 shadow-sm text-sm ${ // Adjusted padding and font size
-          isOwn
-            ? 'bg-red-600 text-white rounded-br-none'
-            : 'bg-gray-100 text-gray-900 rounded-bl-none'
+        className={`relative max-w-[75%] md:max-w-[65%] rounded-2xl px-4 py-3 shadow-lg ${
+          isOwnMessage
+            ? 'bg-gradient-to-br from-red-500 to-red-600 text-white rounded-br-md'
+            : 'bg-white text-gray-900 rounded-bl-md border border-gray-200'
         }`}
       >
         {/* Media Content */}
-        {message.media_key && (
-            // Apply different styling based on media type
-            <div className={`mb-1 relative rounded-lg overflow-hidden bg-gray-200 flex items-center justify-center ${message.media_type === 'image' ? 'max-w-xs' : 'max-w-sm'}`}> {/* Image max width smaller */}
+        {message.media_key && !useMock && (
+            <div className={`mb-2 relative rounded-lg overflow-hidden bg-gray-200 flex items-center justify-center ${message.media_type === 'image' ? 'max-w-xs' : 'max-w-sm'}`}>
                 {isLoadingMedia && (
-                    <div className="aspect-video w-full flex items-center justify-center"> {/* Placeholder aspect ratio */}
+                    <div className="aspect-video w-full flex items-center justify-center">
                         <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
                     </div>
                 )}
-                {!isLoadingMedia && hasMediaError && ( // Error state
+                {!isLoadingMedia && hasMediaError && (
                      <div className="aspect-video w-full flex flex-col items-center justify-center text-xs text-red-500 p-2 text-center">
                         {message.media_type === 'image' ? <ImageIcon className="w-5 h-5 mx-auto mb-1 text-red-400"/> : <VideoIcon className="w-5 h-5 mx-auto mb-1 text-red-400"/>}
                          メディア表示エラー
@@ -90,19 +94,19 @@ export default function MessageBubble({ message, isOwn }) {
                   <img
                     src={mediaUrl}
                     alt="送信画像"
-                    className="block max-w-full max-h-[300px] h-auto rounded-lg cursor-pointer" // Max height, allow natural width
-                    onClick={() => window.open(mediaUrl, '_blank')} // Open in new tab
+                    className="block max-w-full max-h-[300px] h-auto rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                    onClick={() => window.open(mediaUrl, '_blank')}
                     loading="lazy"
-                    onError={() => setHasMediaError(true)} // Handle image load error
+                    onError={() => setHasMediaError(true)}
                   />
                 )}
                 {!isLoadingMedia && !hasMediaError && mediaUrl && message.media_type === 'video' && (
                   <video
                     src={mediaUrl}
                     controls
-                    className="block max-w-full max-h-[300px] h-auto rounded-lg bg-black" // Max height
+                    className="block max-w-full max-h-[300px] h-auto rounded-lg bg-black"
                     preload="metadata"
-                    onError={() => setHasMediaError(true)} // Handle video load error
+                    onError={() => setHasMediaError(true)}
                   />
                 )}
             </div>
@@ -110,18 +114,21 @@ export default function MessageBubble({ message, isOwn }) {
 
         {/* Text Content */}
         {message.content && (
-          <p className="whitespace-pre-wrap break-words leading-snug">{message.content}</p>
+          <p className="whitespace-pre-wrap break-words leading-relaxed text-sm">
+            {message.content}
+          </p>
         )}
 
-        {/* Timestamp (only show if there's content or media) */}
+        {/* Timestamp */}
         {(message.content || message.media_key) && messageDate && isDate(messageDate) && (
-            <p className={`text-[10px] mt-1 text-right ${ // Smaller timestamp
-                isOwn ? 'text-red-100 opacity-80' : 'text-gray-400'
+            <div className={`flex items-center gap-1 mt-2 text-xs ${
+                isOwnMessage ? 'text-red-100 opacity-80 justify-end' : 'text-gray-400 justify-start'
             }`}>
-              {format(messageDate, "HH:mm", { locale: ja })}
-            </p>
+              <Clock className="w-3 h-3" />
+              <span>{format(messageDate, "HH:mm", { locale: ja })}</span>
+            </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }

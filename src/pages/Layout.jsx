@@ -313,7 +313,7 @@ export default function Layout({ children, currentPageName }) {
 
           <SidebarFooter className="border-t border-gray-200 p-4 bg-gradient-to-r from-blue-50 to-white">
             {console.log('Sidebar Footer - user:', user, 'cognitoUser:', cognitoUser, 'isLoadingUser:', isLoadingUser)}
-            {user ? (
+            {user && cognitoUser ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-3 px-2">
                    <div className="w-10 h-10 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center overflow-hidden">
