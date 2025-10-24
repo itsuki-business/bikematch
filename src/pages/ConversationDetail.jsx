@@ -214,8 +214,7 @@ export default function ConversationDetail() {
        const conversationInput = {
            id: conversationId,
            last_message: lastMessageText,
-           last_message_at: new Date().toISOString(),
-           // _version: conversation?._version // Include if using conflict detection
+           last_message_at: new Date().toISOString()
        };
        // --- Amplify API (GraphQL) ---
        await API.graphql(graphqlOperation(updateConversation, { input: conversationInput }));

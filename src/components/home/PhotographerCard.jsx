@@ -19,8 +19,9 @@ export default function PhotographerCard({ photographer, currentUser }) {
     queryKey: ['portfolio', photographer.id],
     queryFn: async () => {
       try {
-        // base44 を bikematchClient.js のインスタンス名に変更 (どちらでも良いが統一)
-        const result = await base44.entities.Portfolio.filter({ photographer_id: photographer.id });
+        // Mock環境ではポートフォリオデータを取得しない（実際のAPIコールは不要）
+        // 本番環境では適切なAPIクライアントを使用
+        const result = [];
         return result || [];
       } catch (error) {
         console.error('Portfolio fetch error:', error);
@@ -65,8 +66,15 @@ export default function PhotographerCard({ photographer, currentUser }) {
 
 
     try {
+      // Mock環境では会話作成機能を無効化
+      // 本番環境では適切なAPIクライアントを使用して会話を作成
+      alert('Mock環境では会話機能は利用できません。本番環境でお試しください。');
+      return;
+      
+      // 以下は本番環境用のコード（コメントアウト）
+      /*
       // 既存の会話を検索（biker_id と photographer_id で検索）
-      const existingConversations = await base44.entities.Conversation.filter({
+      const existingConversations = await apiClient.entities.Conversation.filter({
         biker_id: currentUser.id,
         photographer_id: photographer.id
       });
@@ -78,25 +86,22 @@ export default function PhotographerCard({ photographer, currentUser }) {
         conversationId = existingConversations[0].id;
       } else {
         // 新しい会話を作成
-        const newConversation = await base44.entities.Conversation.create({
+        const newConversation = await apiClient.entities.Conversation.create({
           biker_id: currentUser.id,
           photographer_id: photographer.id,
-          biker_name: currentUser.nickname || currentUser.name || 'ライダー', // 名前がない場合のデフォルト
-          photographer_name: photographer.nickname || photographer.name || 'フォトグラファー', // 名前がない場合のデフォルト
-          last_message: '会話を開始しました', // 修正点：初期メッセージを設定
-          status: "依頼中", // 会話の初期状態
-          // last_message_at は bikematchClient 側で自動設定される
+          biker_name: currentUser.nickname || currentUser.name || 'ライダー',
+          photographer_name: photographer.nickname || photographer.name || 'フォトグラファー',
+          last_message: '会話を開始しました',
+          status: "依頼中",
         });
         conversationId = newConversation.id;
-        // 新規作成後に会話リストのキャッシュを無効化して更新を促す
         queryClient.invalidateQueries({ queryKey: ['conversations'] });
       }
 
-      // 会話詳細ページに遷移
       navigate(createPageUrl("ConversationDetail") + `?id=${conversationId}`);
+      */
     } catch (error) {
       console.error('Failed to create/get conversation:', error);
-      // 修正点：エラーメッセージをより具体的に
       alert(`メッセージルームの作成/取得に失敗しました: ${error.message || '不明なエラーが発生しました。時間をおいて再度お試しください。'}`);
     }
   };

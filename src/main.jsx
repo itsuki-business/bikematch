@@ -8,11 +8,21 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 // ---------------
 
-// --- Amplify ---
-import { Amplify } from 'aws-amplify';
-import awsExports from './aws-exports'; // Amplifyが生成する設定ファイル
-// AWS Amplifyの設定
-Amplify.configure(awsExports);
+// --- Environment Configuration ---
+import { useMock } from './config/environment';
+// ---------------
+
+// --- Amplify Configuration ---
+if (useMock) {
+  console.log('🚀 Using Mock Amplify services for local development');
+} else {
+  console.log('🌐 Using Production Amplify services');
+  import('aws-amplify').then(({ Amplify }) => {
+    import('./aws-exports').then(({ default: awsExports }) => {
+      Amplify.configure(awsExports);
+    });
+  });
+}
 // ---------------
 
 // TanStack Queryのクライアントを作成

@@ -6,6 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Eye, EyeOff, Mail, Lock, AlertCircle } from "lucide-react";
 // --- Amplify ---
+import { useMock } from '@/config/environment';
+import mockAuthService from '@/services/mockAuthService';
+import { mockHub } from '@/mockAmplify';
 import { signIn, signOut } from 'aws-amplify/auth';
 import { Hub } from 'aws-amplify/utils';
 // ---------------
@@ -48,11 +51,21 @@ export default function LoginModal({ isOpen, onClose, onSuccess }) {
     }
 
     try {
-      // --- Amplify Auth ---
-      const result = await signIn({
-        username: formData.email,
-        password: formData.password
-      });
+      // Mockまたは本番の認証サービスを使用
+      let result;
+      if (useMock) {
+        result = await mockAuthService.signIn({
+          username: formData.email,
+          password: formData.password
+        });
+      } else {
+        // --- Amplify Auth ---
+        result = await signIn({
+          username: formData.email,
+          password: formData.password
+        });
+        // --------------------
+      }
       
       console.log('Sign in result:', result);
       
@@ -66,10 +79,17 @@ export default function LoginModal({ isOpen, onClose, onSuccess }) {
       };
 
       // Hubイベントを発火して認証状態の変更を通知
-      Hub.dispatch('auth', {
-        event: 'signedIn',
-        data: { user: userInfo }
-      });
+      if (useMock) {
+        mockHub.dispatch('auth', {
+          event: 'signedIn',
+          data: { user: userInfo }
+        });
+      } else {
+        Hub.dispatch('auth', {
+          event: 'signedIn',
+          data: { user: userInfo }
+        });
+      }
 
       onSuccess(userInfo);
       onClose();
@@ -81,7 +101,11 @@ export default function LoginModal({ isOpen, onClose, onSuccess }) {
       if (error.message && error.message.includes('already a signed in user')) {
         console.warn('⚠️ Already signed in user detected. Signing out and retrying...');
         try {
-          await signOut();
+          if (useMock) {
+            await mockAuthService.signOut();
+          } else {
+            await signOut();
+          }
           console.log('✅ Signed out successfully. Please try logging in again.');
           setErrors({ general: '既存のセッションをクリアしました。もう一度ログインしてください。' });
           setIsLoading(false);

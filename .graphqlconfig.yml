@@ -1,6 +1,6 @@
 projects:
   bikematch:
-    schemaPath: src/graphql/schema.json
+    schemaPath: amplify/backend/api/bikematch/build/schema.graphql
     includes:
       - src/graphql/**/*.js
     excludes:
@@ -10,6 +10,6 @@ projects:
         codeGenTarget: javascript
         generatedFileName: ''
         docsFilePath: src/graphql
-extensions:
-  amplify:
-    version: 3
+        region: ap-northeast-1
+        apiId: null
+        maxDepth: 2

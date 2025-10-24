@@ -4,14 +4,10 @@
     "apiName": "bikematch",
     "serviceName": "AppSync",
     "defaultAuthType": {
-      "mode": "API_KEY",
-      "expirationTime": 7
+      "mode": "AMAZON_COGNITO_USER_POOLS",
+      "cognitoUserPoolId": "authbikematchdf804b56"
     },
-    "additionalAuthTypes": [
-      {
-        "mode": "AMAZON_COGNITO_USER_POOLS",
-        "cognitoUserPoolId": "authbikematchdf804b56"
-      }
-    ]
+    "additionalAuthTypes": [],
+    "conflictResolution": {}
   }
 }

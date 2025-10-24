@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 // --- Amplify v6 ---
+import { useMock } from '@/config/environment';
+import mockAuthService from '@/services/mockAuthService';
+import mockAPIService from '@/services/mockAPIService';
+import mockStorageService from '@/services/mockStorageService';
 import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/api';
 import { getUrl, uploadData } from 'aws-amplify/storage';
 // import { DataStore } from '@aws-amplify/datastore';
 import { getUser, listPortfolios } from '@/graphql/queries';
-import { updateUser, createPortfolio, deletePortfolio } from '@/graphql/mutations';
+import { updateUser, createUser, createPortfolio, deletePortfolio } from '@/graphql/mutations';
 // import { User as UserModel, Portfolio as PortfolioModel } from '@/models'; // DataStoreの場合
 // ---------------
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -79,6 +83,7 @@ export default function Profile() {
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState(""); // For errors
   const [profileImageUrl, setProfileImageUrl] = useState(null); // Display URL for profile image
+  const [isFirstTimeProfileSetup, setIsFirstTimeProfileSetup] = useState(false); // 初回プロフィール登録フラグ
 
   // --- Fetch User Data ---
   useEffect(() => {
@@ -87,8 +92,14 @@ export default function Profile() {
       setErrorMessage(""); // Clear previous errors
       try {
         // 現在のログインユーザーを取得
-        const cognitoUser = await getCurrentUser();
-        const attributes = await fetchUserAttributes();
+        let cognitoUser, attributes;
+        if (useMock) {
+          cognitoUser = await mockAuthService.getCurrentUser();
+          attributes = await mockAuthService.fetchUserAttributes();
+        } else {
+          cognitoUser = await getCurrentUser();
+          attributes = await fetchUserAttributes();
+        }
         const currentId = cognitoUser.userId; // Get the unique user ID
         setCurrentUserId(currentId);
         setCognitoSub(currentId);
@@ -107,17 +118,31 @@ export default function Profile() {
         console.log(`Profile page - Current user: ${currentId}, Target user: ${userId}, IsOwn: ${isOwn}`);
 
         // Fetch user data from App DB (GraphQL)
-        const client = generateClient();
-        const userDataResult = await client.graphql({
-          query: getUser,
-          variables: { id: userId },
-          authMode: 'userPool' // Cognito User Pools認証を使用
-        });
+        let userDataResult;
+        if (useMock) {
+          console.log("🔍 Fetching user data for ID:", userId, "(Mock)");
+          userDataResult = await mockAPIService.getUser({ id: userId });
+        } else {
+          const client = generateClient();
+          console.log("🔍 Fetching user data for ID:", userId);
+          console.log("🔍 Current Cognito user ID:", currentId);
+          console.log("🔍 Auth mode: userPool");
+          
+          userDataResult = await client.graphql({
+            query: getUser,
+            variables: { id: userId },
+            authMode: 'userPool' // Cognito User Pools認証を使用
+          });
+        }
+        
+        console.log("📥 Raw GraphQL result:", userDataResult);
         const appUser = userDataResult.data.getUser;
-        console.log("Fetched appUser from DB:", appUser);
+        console.log("📥 Fetched appUser from DB:", appUser);
 
         if (appUser) {
-          setUser({ ...attributes, ...appUser }); // Combine Cognito attrs and DB data
+          const userData = { ...attributes, ...appUser };
+          
+          setUser(userData);
           setFormData({ // Populate form with fetched data
              user_type: appUser.user_type || "",
              nickname: appUser.nickname || attributes.name || "", // Fallback to Cognito name
@@ -160,6 +185,7 @@ export default function Profile() {
                 special_conditions: [], is_accepting_requests: false
             });
             setProfileImageUrl(null);
+            setIsFirstTimeProfileSetup(true); // 初回プロフィール登録フラグを設定
             setSuccessMessage("BikeMatchへようこそ！プロフィール情報を入力してください。");
           } else {
             // 他人のプロフィールが存在しない場合
@@ -167,13 +193,32 @@ export default function Profile() {
           }
         }
       } catch (error) {
-        console.error('Error fetching user:', error);
-        // エラーメッセージは表示せず、ログのみ記録
-         // Redirect to login if not authenticated
-         if (error.message === 'The user is not authenticated' || error.name === 'NotAuthorizedException') {
-             // Redirect to home page if not authenticated
-             navigate('/');
-         }
+        console.error('❌ Error fetching user:', error);
+        console.error('❌ Error details:', JSON.stringify(error, null, 2));
+        
+        // 認証エラーの場合
+        if (error.message === 'The user is not authenticated' || 
+            error.name === 'NotAuthorizedException' ||
+            error.message?.includes('NotAuthorizedException') ||
+            error.message?.includes('Unauthorized')) {
+          console.log("🔐 User not authenticated, redirecting to home");
+          navigate('/');
+          return;
+        }
+        
+        // GraphQLエラーの場合
+        if (error.errors && error.errors.length > 0) {
+          console.error("❌ GraphQL errors:", error.errors);
+          const firstError = error.errors[0];
+          if (firstError.errorType === 'Unauthorized') {
+            console.log("🔐 GraphQL Unauthorized error, redirecting to home");
+            navigate('/');
+            return;
+          }
+        }
+        
+        // その他のエラーの場合
+        setErrorMessage("ユーザーデータの取得に失敗しました。ページを再読み込みしてください。");
       } finally {
         setIsLoadingUser(false);
       }
@@ -201,16 +246,23 @@ export default function Profile() {
     queryFn: async () => {
       if (!cognitoSub || formData.user_type !== 'photographer') return [];
       try {
-        // --- Amplify API (GraphQL) ---
-        const client = generateClient();
-        const result = await client.graphql({
-          query: listPortfolios,
-          variables: {
-            filter: { photographer_id: { eq: cognitoSub } } // Filter by user ID
-            // limit: MAX_PORTFOLIO_IMAGES // Optional: Limit results if needed
-          },
-          authMode: 'userPool' // Cognito User Pools認証を使用
-        });
+        // Amplify API (GraphQL)
+        let result;
+        if (useMock) {
+          result = await mockAPIService.listPortfolios({
+            filter: { photographer_id: { eq: cognitoSub } }
+          });
+        } else {
+          const client = generateClient();
+          result = await client.graphql({
+            query: listPortfolios,
+            variables: {
+              filter: { photographer_id: { eq: cognitoSub } } // Filter by user ID
+              // limit: MAX_PORTFOLIO_IMAGES // Optional: Limit results if needed
+            },
+            authMode: 'userPool' // Cognito User Pools認証を使用
+          });
+        }
         
         const items = result.data?.listPortfolios?.items || [];
         
@@ -231,11 +283,6 @@ export default function Profile() {
         );
         
         return itemsWithUrls;
-        // -----------------------------
-
-        // --- DataStoreの場合 ---
-        // return await DataStore.query(PortfolioModel, p => p.photographer_id.eq(cognitoSub));
-        // --------------------
       } catch (error) {
         console.error('Portfolio fetch error:', error);
         // 初回ユーザーの場合はポートフォリオが存在しないのが正常なので、エラーメッセージは表示しない
@@ -258,69 +305,95 @@ export default function Profile() {
       console.log("Starting profile save with cognitoSub:", cognitoSub);
       console.log("Profile data received:", profileData);
       console.log("Current user state:", user);
-      console.log("Current user._version:", user?._version);
 
-      // Prepare data for GraphQL mutation (exclude fields not in schema if necessary)
+      // Prepare data for GraphQL mutation
       const inputData = {
         id: cognitoSub, // Crucial: Provide the ID for update
-        user_type: profileData.user_type || null, // Ensure null if empty
+        user_type: profileData.user_type || null,
         nickname: profileData.nickname,
         prefecture: profileData.prefecture || null,
         bike_maker: profileData.bike_maker || null,
         bike_model: profileData.bike_model || null,
-        shooting_genres: profileData.shooting_genres,
-        price_range_min: profileData.price_range_min === "" ? null : parseFloat(profileData.price_range_min), // Handle empty string -> null
+        shooting_genres: profileData.shooting_genres || [],
+        price_range_min: profileData.price_range_min === "" ? null : parseFloat(profileData.price_range_min),
         price_range_max: profileData.price_range_max === "" ? null : parseFloat(profileData.price_range_max),
         equipment: profileData.equipment || null,
         bio: profileData.bio || null,
-        profile_image: profileData.profile_image || null, // S3 Key
+        profile_image: profileData.profile_image || null,
         portfolio_website: profileData.portfolio_website || null,
         instagram_url: profileData.instagram_url || null,
         twitter_url: profileData.twitter_url || null,
         youtube_url: profileData.youtube_url || null,
-        special_conditions: profileData.special_conditions,
-        is_accepting_requests: profileData.is_accepting_requests
+        special_conditions: profileData.special_conditions || [],
+        is_accepting_requests: profileData.is_accepting_requests !== undefined ? profileData.is_accepting_requests : true
       };
       
-      // _versionがある場合のみ追加（初回作成時は不要）
-      if (user?._version) {
-        inputData._version = user._version;
-        console.log("Adding _version to inputData:", user._version);
-      } else {
-        console.warn("⚠️ _version not found in user state. This might be the first save or user data not loaded.");
-      }
-       // Remove null fields if your schema doesn't accept them explicitly for updates
-       // Object.keys(inputData).forEach(key => (inputData[key] === null) && delete inputData[key]);
-
-
       console.log("Saving profile with data:", inputData);
+      console.log("🔍 Cognito Sub:", cognitoSub);
+      console.log("🔍 Timestamp:", new Date().toISOString());
 
-      // --- Amplify API (GraphQL) ---
-      const client = generateClient();
-      
-      // ユーザーレコードは新規登録時に作成されているので、updateのみ
-      console.log("Updating user profile...");
-      const result = await client.graphql({
-        query: updateUser,
-        variables: { input: inputData },
-        authMode: 'userPool' // Cognito User Pools認証を使用
-      });
-      console.log("Update successful:", result);
-      return result.data.updateUser;
-      // -----------------------------
-
-      // --- DataStoreの場合 ---
-      // const original = await DataStore.query(UserModel, cognitoSub);
-      // if (!original) throw new Error("Original user data not found for update");
-      // const updatedUser = await DataStore.save(UserModel.copyOf(original, updated => {
-      //     Object.assign(updated, inputData); // Assign new data
-      // }));
-      // return updatedUser;
-      // --------------------
+      // Amplify API (GraphQL)
+      let result;
+      if (useMock) {
+        try {
+          console.log("Saving user profile... (Mock)");
+          
+          // 新規ユーザーか既存ユーザーかを判定
+          const isNewUser = !user || !user.id;
+          
+          if (isNewUser) {
+            console.log("Creating new user profile... (Mock)");
+            result = await mockAPIService.createUser({ input: inputData });
+            console.log("Create successful:", result);
+            return result.data.createUser;
+          } else {
+            console.log("Updating existing user profile... (Mock)");
+            result = await mockAPIService.updateUser({ input: inputData });
+            console.log("Update successful:", result);
+            return result.data.updateUser;
+          }
+        } catch (error) {
+          console.error("Mock API error:", error);
+          throw error;
+        }
+      } else {
+        const client = generateClient();
+        
+        try {
+          console.log("Saving user profile...");
+          
+          // 新規ユーザーか既存ユーザーかを判定
+          // 登録時にDBにレコードが作成されているので、基本的にupdateUserを使用
+          const isNewUser = !user || !user.id;
+          
+          if (isNewUser) {
+            console.log("Creating new user profile...");
+            result = await client.graphql({
+              query: createUser,
+              variables: { input: inputData },
+              authMode: 'userPool'
+            });
+            console.log("Create successful:", result);
+            return result.data.createUser;
+          } else {
+            console.log("Updating existing user profile...");
+            result = await client.graphql({
+              query: updateUser,
+              variables: { input: inputData },
+              authMode: 'userPool'
+            });
+            console.log("Update successful:", result);
+            return result.data.updateUser;
+          }
+        } catch (error) {
+          console.error("GraphQL update error:", error);
+          throw error;
+        }
+      }
     },
     onSuccess: (updatedUserData) => {
       setSuccessMessage("プロフィールを更新しました");
-      // Update local state immediately for better UX (including _version for next update)
+      // Update local state immediately for better UX
       setUser(prev => ({ ...prev, ...updatedUserData }));
       setFormData(prev => ({ ...prev, ...updatedUserData })); // Update form too in case some fields were transformed
       // If profile image key changed, refetch URL
@@ -334,15 +407,28 @@ export default function Profile() {
       // Delay reload slightly to allow state updates and message visibility
       setTimeout(() => {
         setSuccessMessage(""); // Clear message after a delay
-        // window.location.reload(); // Reload might not be necessary if state updates handle UI correctly
+        
+        // 初回プロフィール登録完了の場合、フラグをリセットしてホーム画面にリダイレクト
+        if (isFirstTimeProfileSetup) {
+          setIsFirstTimeProfileSetup(false);
+          window.location.href = '/';
+        }
       }, 2000); // Show success for 2 seconds
     },
     onError: (error) => {
         console.error("Profile update failed:", error);
         console.error("Error details:", JSON.stringify(error, null, 2));
-        const errorMessage = error.errors?.[0]?.message || error.message || '不明なエラー';
+        
+        let errorMessage = '不明なエラー';
+        
+        if (error.errors && error.errors.length > 0) {
+          errorMessage = error.errors[0].message;
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+        
         setErrorMessage(`プロフィールの更新に失敗しました: ${errorMessage}`);
-     }
+    }
   });
 
   // --- Add Portfolio Mutation ---
@@ -360,20 +446,20 @@ export default function Profile() {
       };
       console.log("Adding portfolio:", inputData);
 
-      // --- Amplify API (GraphQL) ---
-      const client = generateClient();
-      const result = await client.graphql({
-        query: createPortfolio,
-        variables: { input: inputData },
-        authMode: 'userPool' // Cognito User Pools認証を使用
-      });
-      return result.data.createPortfolio;
-      // -----------------------------
-
-       // --- DataStoreの場合 ---
-       // const newPortfolio = await DataStore.save(new PortfolioModel(inputData));
-       // return newPortfolio;
-       // --------------------
+      // Amplify API (GraphQL)
+      let result;
+      if (useMock) {
+        result = await mockAPIService.createPortfolio({ input: inputData });
+        return result.data.createPortfolio;
+      } else {
+        const client = generateClient();
+        result = await client.graphql({
+          query: createPortfolio,
+          variables: { input: inputData },
+          authMode: 'userPool' // Cognito User Pools認証を使用
+        });
+        return result.data.createPortfolio;
+      }
     },
     onSuccess: (newPortfolioItem) => {
       // Invalidate portfolio query to refetch
@@ -395,36 +481,26 @@ export default function Profile() {
        setErrorMessage("");
        console.log("Deleting portfolio:", portfolioId);
        // --- Amplify API (GraphQL) ---
-       // You need the item's ID and potentially its _version for deletion
+       // You need the item's ID for deletion
        const itemToDelete = portfolio.find(item => item.id === portfolioId);
        if (!itemToDelete) throw new Error("Portfolio item not found");
 
        const inputData = {
-           id: portfolioId,
-           _version: itemToDelete._version // Include for conflict detection
+         id: portfolioId
        };
-       const client = generateClient();
-       const result = await client.graphql({
-         query: deletePortfolio,
-         variables: { input: inputData },
-         authMode: 'userPool' // Cognito User Pools認証を使用
-       });
-       // Optionally delete the S3 object associated with itemToDelete.image_key here
-       // try { await Storage.remove(itemToDelete.image_key); } catch (e) { console.warn("S3 delete failed", e); }
-       return result.data.deletePortfolio;
-       // -----------------------------
-
-       // --- DataStoreの場合 ---
-       // const itemToDelete = await DataStore.query(PortfolioModel, portfolioId);
-       // if (itemToDelete) {
-       //    await DataStore.delete(itemToDelete);
-       //    // Optionally delete S3 object
-       //    // try { await Storage.remove(itemToDelete.image_key); } catch (e) { console.warn("S3 delete failed", e); }
-       //    return { id: portfolioId }; // Return something to indicate success
-       // } else {
-       //    throw new Error("Portfolio item not found in DataStore");
-       // }
-       // --------------------
+       let result;
+       if (useMock) {
+         result = await mockAPIService.deletePortfolio({ input: inputData });
+         return result.data.deletePortfolio;
+       } else {
+         const client = generateClient();
+         result = await client.graphql({
+           query: deletePortfolio,
+           variables: { input: inputData },
+           authMode: 'userPool' // Cognito User Pools認証を使用
+         });
+         return result.data.deletePortfolio;
+       }
     },
     onSuccess: (deletedItem) => {
         console.log("Deleted portfolio:", deletedItem?.id);
@@ -562,6 +638,13 @@ export default function Profile() {
     e.preventDefault();
     setSuccessMessage(""); // Clear message before submitting
     setErrorMessage("");
+    
+    // 重複実行の防止
+    if (updateProfileMutation.isPending) {
+      console.log("⚠️ Update already in progress, ignoring duplicate submission");
+      return;
+    }
+    
     // Basic validation (can be enhanced with Zod etc.)
     if (!formData.user_type) {
         setErrorMessage("ユーザータイプを選択してください。");
@@ -1127,14 +1210,52 @@ export default function Profile() {
 
           {/* Save Button - 自分のプロフィールの場合のみ表示 */}
           {isOwnProfile && (
-            <Button
-              type="submit"
-              className="w-full bg-red-600 hover:bg-red-700 text-white py-3 text-lg font-semibold mt-8"
-              disabled={updateProfileMutation.isPending || uploadingImage || uploadingPortfolio}
-            >
-              <Save className="w-5 h-5 mr-2" />
-              {updateProfileMutation.isPending ? "保存中..." : "プロフィールを保存"}
-            </Button>
+            <div className="mt-8 space-y-4">
+              {/* 初回プロフィール登録時の特別なメッセージ */}
+              {isFirstTimeProfileSetup && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <h3 className="text-sm font-medium text-blue-800">
+                        初回プロフィール登録
+                      </h3>
+                      <div className="mt-2 text-sm text-blue-700">
+                        <p>プロフィール情報を入力して保存してください。保存後、BikeMatchのメイン機能をご利用いただけます。</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <Button
+                type="submit"
+                className="w-full bg-red-600 hover:bg-red-700 text-white py-3 text-lg font-semibold"
+                disabled={updateProfileMutation.isPending || uploadingImage || uploadingPortfolio}
+              >
+                <Save className="w-5 h-5 mr-2" />
+                {updateProfileMutation.isPending ? "保存中..." : "プロフィールを保存"}
+              </Button>
+              
+              {/* 初回プロフィール登録時はログアウトボタンのみ表示 */}
+              {isFirstTimeProfileSetup && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    // ログアウト処理
+                    window.location.href = '/logout';
+                  }}
+                >
+                  ログアウト
+                </Button>
+              )}
+            </div>
           )}
         </form>
 

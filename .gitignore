@@ -46,3 +46,13 @@ amplifytools.xcconfig
 .secret-*
 **.sample
 #amplify-do-not-edit-end
+
+# Mock data files
+user_backup.json
+user_item.json
+
+# Environment files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local

@@ -33,10 +33,10 @@
       "auth": {
         "bikematchdf804b56": {}
       },
-      "api": {
+      "storage": {
         "bikematch": {}
       },
-      "storage": {
+      "api": {
         "bikematch": {}
       }
     }

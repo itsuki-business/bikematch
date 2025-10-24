@@ -19,6 +19,9 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 // --- Amplify ---
+import { useMock } from '@/config/environment';
+import mockAuthService from '@/services/mockAuthService';
+import mockAPIService from '@/services/mockAPIService';
 import { Hub } from 'aws-amplify/utils';
 import { getCurrentUser, signOut } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/api';
@@ -69,14 +72,17 @@ export default function Layout({ children, currentPageName }) {
   useEffect(() => {
     if (cognitoUser) {
       // cognitoUserが存在すれば、appUserの有無に関わらずuserをセット
-      setUser({
+      const userData = {
         id: cognitoUser.username || cognitoUser.userId || cognitoUser.attributes?.sub,
         username: cognitoUser.username || cognitoUser.userId,
         email: cognitoUser.attributes?.email,
         ...appUser, // appUserがあれば追加情報をマージ
-      });
+      };
+      console.log('Layout - Setting user data:', userData);
+      setUser(userData);
       setIsLoadingUser(false);
     } else {
+      console.log('Layout - No cognitoUser, setting user to null');
       setUser(null);
       setIsLoadingUser(false);
     }
@@ -84,8 +90,14 @@ export default function Layout({ children, currentPageName }) {
 
   const checkCurrentUser = async () => {
     try {
-      const current = await getCurrentUser();
-      console.log('checkCurrentUser - current user:', current);
+      let current;
+      if (useMock) {
+        current = await mockAuthService.getCurrentUser();
+        console.log('checkCurrentUser - mock current user:', current);
+      } else {
+        current = await getCurrentUser();
+        console.log('checkCurrentUser - production current user:', current);
+      }
       setCognitoUser(current);
       await fetchAppUserData(current.username || current.userId);
     } catch (error) {
@@ -104,8 +116,21 @@ export default function Layout({ children, currentPageName }) {
       return;
     }
     try {
-      const client = generateClient();
-      const result = await client.graphql({ query: getUser, variables: { id: userId }, authMode: 'userPool' });
+      let result;
+      if (useMock) {
+        result = await mockAPIService.graphql({ 
+          query: getUser, 
+          variables: { id: userId }, 
+          authMode: 'userPool' 
+        });
+      } else {
+        const client = generateClient();
+        result = await client.graphql({ 
+          query: getUser, 
+          variables: { id: userId }, 
+          authMode: 'userPool' 
+        });
+      }
       const fetchedUser = result.data.getUser;
       console.log('fetchAppUserData - fetched user:', fetchedUser);
       if (fetchedUser) {
@@ -154,8 +179,18 @@ export default function Layout({ children, currentPageName }) {
 
   const handleLogout = async () => {
     try {
-      await signOut();
-      navigate('/home-for-non-register');
+      if (useMock) {
+        await mockAuthService.signOut();
+      } else {
+        await signOut();
+      }
+      
+      // FirstTimeProfileSetupページからログアウトした場合は訪問者ページに遷移
+      if (location.pathname === '/first-time-profile-setup') {
+        navigate('/home-for-non-register');
+      } else {
+        navigate('/home-for-non-register');
+      }
     } catch (error) {
       console.error('Error signing out: ', error);
     }
@@ -165,6 +200,11 @@ export default function Layout({ children, currentPageName }) {
     { title: "ホーム", url: "/home-for-non-register", icon: Home },
     { title: "利用規約", url: "/terms", icon: FileText },
   ];
+  
+  const firstTimeProfileSetupNavigationItems = [
+    { title: "プロフィール登録", url: "/first-time-profile-setup", icon: User },
+  ];
+  
   const authenticatedNavigationItems = [
     { title: "ホーム", url: "/home-for-register", icon: Home },
     { title: "プロフィール", url: user?.id ? `/profile/${user.id}` : "/profile", icon: User },
@@ -172,7 +212,11 @@ export default function Layout({ children, currentPageName }) {
     { title: "評価・口コミ", url: "/reviews", icon: Star },
     { title: "利用規約", url: "/terms", icon: FileText },
   ];
-  const navigationItems = user ? authenticatedNavigationItems : publicNavigationItems;
+  
+  // 初回プロフィール登録ページの場合は専用のナビゲーションを使用
+  const navigationItems = location.pathname === '/first-time-profile-setup' 
+    ? firstTimeProfileSetupNavigationItems 
+    : user ? authenticatedNavigationItems : publicNavigationItems;
 
   if (isLoadingUser) {
       return (
@@ -284,6 +328,17 @@ export default function Layout({ children, currentPageName }) {
                     <p className="text-xs text-gray-500 truncate">{user.email}</p>
                   </div>
                 </div>
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors duration-200"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span className="font-medium text-sm">ログアウト</span>
+                </button>
+              </div>
+            ) : location.pathname === '/first-time-profile-setup' ? (
+              // 初回プロフィール登録ページではログアウトボタンのみ表示
+              <div className="space-y-2">
                 <button
                   onClick={handleLogout}
                   className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors duration-200"

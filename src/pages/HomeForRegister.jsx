@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useMock } from '@/config/environment';
+import mockAuthService from '@/services/mockAuthService';
+import mockAPIService from '@/services/mockAPIService';
 import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/api';
 import { listUsers } from '@/graphql/queries';
@@ -38,6 +41,7 @@ const SPECIAL_CONDITIONS = [
 export default function HomeForRegister() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [filters, setFilters] = useState({
@@ -76,12 +80,17 @@ export default function HomeForRegister() {
       }
       console.log("Constructed API Filters:", apiFilters);
       try {
-        const client = generateClient();
-        const result = await client.graphql({
-          query: listUsers,
-          variables: { filter: apiFilters },
-          authMode: 'userPool' // Cognito User Pools認証を使用
-        });
+        let result;
+        if (useMock) {
+          result = await mockAPIService.listUsers({ filter: apiFilters });
+        } else {
+          const client = generateClient();
+          result = await client.graphql({
+            query: listUsers,
+            variables: { filter: apiFilters },
+            authMode: 'userPool' // Cognito User Pools認証を使用
+          });
+        }
         console.log("GraphQL Result:", result);
         return result.data?.listUsers?.items || [];
       } catch (error) {
@@ -96,13 +105,39 @@ export default function HomeForRegister() {
 
   // 認証状態を取得
   useEffect(() => {
+    console.log('HomeForRegister: useEffect triggered');
     const checkAuth = async () => {
       setIsLoadingUser(true);
       try {
-        const cognitoUser = await getCurrentUser();
-        const attributes = await fetchUserAttributes();
+        // URLパラメータからユーザーIDを取得
+        const userIdFromParams = searchParams.get('userId');
+        console.log('HomeForRegister - UserId from params:', userIdFromParams);
+        
+        let cognitoUser, attributes;
+        if (useMock) {
+          cognitoUser = await mockAuthService.getCurrentUser();
+          attributes = await mockAuthService.fetchUserAttributes();
+          
+          // Mock環境でユーザーIDが取得できない場合は、URLパラメータを使用
+          if (!cognitoUser?.userId && userIdFromParams) {
+            cognitoUser = {
+              userId: userIdFromParams,
+              username: userIdFromParams,
+              attributes: attributes || {}
+            };
+          }
+        } else {
+          cognitoUser = await getCurrentUser();
+          attributes = await fetchUserAttributes();
+        }
+        
         console.log('HomeForRegister - Current user:', cognitoUser);
         console.log('HomeForRegister - User attributes:', attributes);
+        console.log('HomeForRegister - Mock auth state:', useMock ? mockAuthService.isAuthenticated : 'N/A');
+        
+        if (!cognitoUser || !cognitoUser.userId) {
+          throw new Error('User not authenticated - missing user data');
+        }
         
         setCurrentUser({
           username: cognitoUser.username ?? cognitoUser.userId,
@@ -119,7 +154,7 @@ export default function HomeForRegister() {
     };
     
     checkAuth();
-  }, [navigate]);
+  }, [navigate, searchParams]);
 
   // ローディング中の表示
   if (isLoadingUser) {

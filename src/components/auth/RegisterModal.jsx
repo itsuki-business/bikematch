@@ -7,7 +7,11 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 // import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"; // 初期登録では不要かも
 import { Eye, EyeOff, Mail, Lock, User, /*Camera, Bike,*/ AlertCircle, CheckCircle } from "lucide-react";
 // --- Amplify ---
-import { signUp, confirmSignUp, signIn, resendSignUpCode, getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
+import { useMock } from '@/config/environment';
+import mockAuthService from '@/services/mockAuthService';
+import mockAPIService from '@/services/mockAPIService';
+import { mockHub } from '@/mockAmplify';
+import { signIn, getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/api';
 import { Hub } from 'aws-amplify/utils';
 import { createUser } from '@/graphql/mutations';
@@ -26,8 +30,6 @@ export default function RegisterModal({ isOpen, onClose, onSuccess }) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
-  const [showVerification, setShowVerification] = useState(false); // 確認コード入力表示用
-  const [verificationCode, setVerificationCode] = useState(""); // 確認コード入力用
 
   // Email/Password validation remains the same
   const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -56,31 +58,45 @@ export default function RegisterModal({ isOpen, onClose, onSuccess }) {
     }
 
     try {
-      // --- Amplify Auth ---
-      const { userId, isSignUpComplete } = await signUp({
-        username: formData.email,
-        password: formData.password,
-        options: {
-          userAttributes: {
-            email: formData.email,
-            name: formData.name.trim(),
-          },
-        },
-      });
+      // Mockまたは本番の認証サービスを使用
+      const { userId, isSignUpComplete } = useMock 
+        ? await mockAuthService.signUp({
+            username: formData.email,
+            password: formData.password,
+            options: {
+              userAttributes: {
+                email: formData.email,
+                name: formData.name.trim(),
+              },
+            },
+          })
+        : await signUp({
+            username: formData.email,
+            password: formData.password,
+            options: {
+              userAttributes: {
+                email: formData.email,
+                name: formData.name.trim(),
+              },
+            },
+          });
+      
       console.log('Sign up successful:', userId, 'isSignUpComplete:', isSignUpComplete);
       
-      // 登録成功、確認コード入力画面に進む
-      // --------------------
-
-      // メールアドレス確認が必要な場合のみ確認コード入力画面へ遷移
-      if (!isSignUpComplete) {
-        console.log('Email verification required, showing verification form');
-        setShowVerification(true);
-      } else {
-        // 確認が不要な場合（通常は発生しない）
-        console.warn('Sign up completed without verification - this should not happen with email verification enabled');
-        setShowVerification(true); // 念のため確認画面を表示
-      }
+      // 登録成功、直接FirstTimeProfileSetupページに遷移
+      console.log('Registration successful, redirecting to profile setup...');
+      
+      // モーダルを閉じる
+      onClose();
+      
+      // フォーム状態をリセット
+      setFormData({ name: "", email: "", password: "", confirmPassword: "" });
+      
+      // FirstTimeProfileSetupページに遷移
+      setTimeout(() => {
+        console.log('Navigating to /first-time-profile-setup');
+        window.location.pathname = '/first-time-profile-setup';
+      }, 500);
     } catch (error) {
       console.error('Error signing up:', error);
       let errorMessage = "登録に失敗しました。";
@@ -98,174 +114,6 @@ export default function RegisterModal({ isOpen, onClose, onSuccess }) {
     }
   };
 
-  // Handle verification code submission
-  const handleVerificationSubmit = async (e) => {
-    e.preventDefault();
-    setErrors({});
-    setIsLoading(true);
-
-    if (!verificationCode.trim()) {
-        setErrors({ verification: "確認コードを入力してください。" });
-        setIsLoading(false);
-        return;
-    }
-
-    try {
-        // --- Amplify Auth ---
-        await confirmSignUp({
-          username: formData.email,
-          confirmationCode: verificationCode.trim(),
-        });
-        console.log('Confirmation successful');
-        // --------------------
-
-        // 確認成功後、自動ログイン
-        console.log('Starting auto-login after confirmation...');
-        
-        // 既にログイン済みかチェック
-        let loginResult;
-        try {
-          const currentUser = await getCurrentUser();
-          console.log('User is already signed in after confirmation:', currentUser);
-          // 既にログイン済みの場合は、signInをスキップ
-          loginResult = {
-            userId: currentUser.userId,
-            isSignedIn: true,
-            nextStep: null
-          };
-        } catch (notSignedInError) {
-          console.log('User is not signed in, proceeding with signIn...');
-          // ログインしていない場合は、signInを実行
-          try {
-            loginResult = await signIn({
-              username: formData.email,
-              password: formData.password
-            });
-          } catch (signInError) {
-            console.error('SignIn error:', signInError);
-            if (signInError.code === 'NotAuthorizedException' && signInError.message.includes('already a signed in user')) {
-              console.log('SignIn failed due to already signed in, getting current user...');
-              // 既にログイン済みの場合は、現在のユーザー情報を取得
-              const currentUser = await getCurrentUser();
-              loginResult = {
-                userId: currentUser.userId,
-                isSignedIn: true,
-                nextStep: null
-              };
-            } else {
-              throw signInError; // 他のエラーは再スロー
-            }
-          }
-        }
-
-        console.log('Auto login result:', loginResult);
-
-        // Amplify v6の構造に合わせてユーザー情報を整形
-        const userInfo = {
-          username: formData.email,
-          userId: loginResult.userId,
-          isSignedIn: loginResult.isSignedIn,
-          nextStep: loginResult.nextStep
-        };
-
-      // DBにユーザーレコードを作成
-      try {
-        console.log('Creating user record in DB...');
-        const client = generateClient();
-        const attributes = await fetchUserAttributes();
-        await client.graphql({
-          query: createUser,
-          variables: {
-            input: {
-              id: userInfo.userId,
-              email: formData.email,
-              nickname: formData.name || formData.email.split('@')[0],
-              average_rating: 0,
-              review_count: 0
-            }
-          },
-          authMode: 'userPool' // Cognito User Pools認証を使用
-        });
-        console.log('User record created successfully in DB');
-      } catch (dbError) {
-        console.error('Error creating user record in DB:', dbError);
-        // DB作成エラーでも続行（後でプロフィールページで作成可能）
-      }
-
-      // Hubイベントを発火して認証状態の変更を通知
-      Hub.dispatch('auth', {
-        event: 'signedIn',
-        data: { user: userInfo }
-      });
-
-      onSuccess(userInfo); // ログイン後のユーザー情報を渡す
-        onClose(); // モーダルを閉じる
-        // Reset form state if needed
-        setFormData({ name: "", email: "", password: "", confirmPassword: "" });
-        setVerificationCode("");
-        setShowVerification(false);
-
-    } catch (error) {
-        console.error('Error confirming sign up:', error);
-        let errorMessage = "確認コードの認証に失敗しました。";
-         if (error.code === 'CodeMismatchException') {
-             errorMessage = '確認コードが正しくありません。';
-         } else if (error.code === 'ExpiredCodeException') {
-             errorMessage = '確認コードの有効期限が切れています。再送信してください。';
-             // ここで再送信ボタンを表示するUI制御
-         } else if (error.code === 'NotAuthorizedException' && error.message.includes('already confirmed')) {
-             errorMessage = 'このアカウントは既に確認済みです。ログインしてください。';
-         } else if (error.code === 'NotAuthorizedException' && error.message.includes('already a signed in user')) {
-             console.log('Already signed in user error detected, getting current user...');
-             // 既にログイン済みの場合は、現在のユーザー情報を取得して成功として処理
-             try {
-               const currentUser = await getCurrentUser();
-               console.log('Current user after already signed in error:', currentUser);
-               const userInfo = {
-                 username: formData.email,
-                 userId: currentUser.userId,
-                 isSignedIn: true,
-                 nextStep: null
-               };
-               
-      // Hubイベントを発火して認証状態の変更を通知
-      Hub.dispatch('auth', {
-        event: 'signedIn',
-        data: { user: userInfo }
-      });
-
-      onSuccess(userInfo);
-               onClose();
-               setFormData({ name: "", email: "", password: "", confirmPassword: "" });
-               setVerificationCode("");
-               setShowVerification(false);
-               return;
-             } catch (getUserError) {
-               console.error('Error getting current user:', getUserError);
-               errorMessage = 'ログイン状態の確認に失敗しました。ページをリロードしてください。';
-             }
-         } else {
-             errorMessage = error.message || errorMessage;
-         }
-        setErrors({ verification: errorMessage });
-    } finally {
-        setIsLoading(false);
-    }
-  };
-
-    // 確認コード再送信処理
-    const handleResendCode = async () => {
-        setErrors({}); // エラーをクリア
-        try {
-            await resendSignUpCode({
-              username: formData.email
-            });
-            alert("確認コードを再送信しました。メールをご確認ください。");
-        } catch (error) {
-            console.error('Error resending code:', error);
-            setErrors({ verification: error.message || "コードの再送信に失敗しました。" });
-        }
-    };
 
 
   // handleChange remains mostly the same
@@ -277,9 +125,6 @@ export default function RegisterModal({ isOpen, onClose, onSuccess }) {
      if (errors.general) {
          setErrors(prev => ({...prev, general: ""}));
      }
-     if (errors.verification) {
-         setErrors(prev => ({...prev, verification: ""}));
-     }
   };
 
   return (
@@ -287,84 +132,11 @@ export default function RegisterModal({ isOpen, onClose, onSuccess }) {
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-center text-2xl font-bold text-gray-900">
-            {showVerification ? "メールアドレス確認" : "新規登録"}
+            新規登録
           </DialogTitle>
         </DialogHeader>
 
-        {/* Show Verification Form */}
-        {showVerification ? (
-           <form onSubmit={handleVerificationSubmit} className="space-y-4">
-              <Alert className="border-blue-200 bg-blue-50 text-blue-800">
-                 <AlertCircle className="h-4 w-4" />
-                 <AlertDescription>
-                   <strong>{formData.email}</strong> 宛に送信された確認コードを入力してください。<br/>
-                   <span className="text-sm text-blue-600 mt-1 block">
-                     ※ メールが届かない場合は、迷惑メールフォルダもご確認ください。
-                   </span>
-                 </AlertDescription>
-              </Alert>
-
-              {errors.verification && (
-                 <Alert variant="destructive" className="border-red-200 bg-red-50 text-red-800">
-                   <AlertCircle className="h-4 w-4" />
-                   <AlertDescription>
-                     {errors.verification}
-                   </AlertDescription>
-                 </Alert>
-              )}
-
-              <div className="space-y-2">
-                 <Label htmlFor="verificationCode" className="text-sm font-medium text-gray-700">
-                   確認コード
-                 </Label>
-                 <Input
-                   id="verificationCode"
-                   type="text"
-                   value={verificationCode}
-                   onChange={(e) => setVerificationCode(e.target.value)}
-                   className={`tracking-widest ${errors.verification ? "border-red-300 focus:border-red-500" : ""}`}
-                   placeholder="------"
-                   maxLength={6}
-                   required
-                   disabled={isLoading}
-                 />
-              </div>
-
-               <div className="flex justify-between items-center pt-2">
-                   <Button
-                       type="button"
-                       variant="link"
-                       size="sm"
-                       onClick={handleResendCode}
-                       className="h-auto p-0 text-sm text-blue-600 hover:underline"
-                       disabled={isLoading}
-                   >
-                       コードを再送信
-                   </Button>
-               </div>
-
-
-              <div className="flex gap-3 pt-4">
-                 <Button
-                   type="button"
-                   variant="outline"
-                   onClick={onClose}
-                   className="flex-1"
-                   disabled={isLoading}
-                 >
-                   キャンセル
-                 </Button>
-                 <Button
-                   type="submit"
-                   className="flex-1 bg-blue-600 hover:bg-blue-700"
-                   disabled={isLoading}
-                 >
-                   {isLoading ? "確認中..." : "確認して登録"}
-                 </Button>
-              </div>
-           </form>
-        ) : (
-        /* Show Registration Form */
+        {/* Show Registration Form */}
         <form onSubmit={handleRegisterSubmit} className="space-y-4">
           {errors.general && (
             <Alert variant="destructive" className="border-red-200 bg-red-50 text-red-800">
@@ -512,7 +284,6 @@ export default function RegisterModal({ isOpen, onClose, onSuccess }) {
             </Button>
           </div>
         </form>
-        )}
       </DialogContent>
     </Dialog>
   );

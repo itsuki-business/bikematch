@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Search, MapPin, Camera, DollarSign, AlertCircle } from "lucide-react";
@@ -9,25 +10,73 @@ import { useQuery } from "@tanstack/react-query";
 import { generateClient } from 'aws-amplify/api';
 import { listUsers } from '@/graphql/queries';
 import { Skeleton } from "@/components/ui/skeleton";
+import { useMock } from '@/config/environment';
+import mockAuthService from '@/services/mockAuthService';
+import { getCurrentUser } from 'aws-amplify/auth';
 
 export default function HomeForNonRegister() {
+  const navigate = useNavigate();
+
+  // 認証状態をチェック
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        let cognitoUser;
+        if (useMock) {
+          cognitoUser = await mockAuthService.getCurrentUser();
+        } else {
+          cognitoUser = await getCurrentUser();
+        }
+        
+        console.log('HomeForNonRegister - User is authenticated:', cognitoUser);
+        
+        // 認証済みユーザーは home-for-register にリダイレクト
+        if (cognitoUser && cognitoUser.userId) {
+          console.log('HomeForNonRegister - Redirecting authenticated user to /home-for-register');
+          navigate('/home-for-register');
+        }
+      } catch (error) {
+        console.log('HomeForNonRegister - User is not authenticated:', error);
+        // 認証されていない場合はこのページを表示
+      }
+    };
+    
+    checkAuth();
+  }, [navigate]);
+
   // フォトグラファーのプレビューを取得（最大3人）
   const { data: photographers = [], isLoading } = useQuery({
     queryKey: ['photographers-preview'],
     queryFn: async () => {
       try {
-        const client = generateClient();
-        const result = await client.graphql({
-          query: listUsers,
-          variables: { 
-            filter: {
-              user_type: { eq: 'photographer' },
-              is_accepting_requests: { eq: true }
-            }
+        // 一時的にMockデータを返す
+        console.log("Using mock photographers data");
+        return [
+          {
+            id: 'mock-photographer-1',
+            nickname: 'サンプルフォトグラファー1',
+            prefecture: '東京都',
+            shooting_genres: ['ポートレート', '風景'],
+            average_rating: 4.5,
+            review_count: 12
           },
-          authMode: 'apiKey' // 非認証ユーザー向けにAPI_KEYを使用
-        });
-        return (result.data?.listUsers?.items || []).slice(0, 3);
+          {
+            id: 'mock-photographer-2',
+            nickname: 'サンプルフォトグラファー2',
+            prefecture: '大阪府',
+            shooting_genres: ['スポーツ', 'イベント'],
+            average_rating: 4.8,
+            review_count: 8
+          },
+          {
+            id: 'mock-photographer-3',
+            nickname: 'サンプルフォトグラファー3',
+            prefecture: '神奈川県',
+            shooting_genres: ['ファッション', '商品撮影'],
+            average_rating: 4.2,
+            review_count: 15
+          }
+        ];
       } catch (error) {
         console.error("Error fetching photographers:", error);
         return [];
