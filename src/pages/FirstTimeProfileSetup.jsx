@@ -16,8 +16,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Save, Upload, X, AlertCircle, CheckCircle } from "lucide-react";
 
@@ -38,19 +36,6 @@ const BIKE_MAKERS = [
   "Triumph", "Harley-Davidson", "Indian", "Moto Guzzi", "MV Agusta", "その他"
 ];
 
-// 撮影ジャンルリスト
-const SHOOTING_GENRES = [
-  "ポートレート", "風景", "ストリート", "スポーツ", "イベント", "商品撮影",
-  "ウェディング", "ファッション", "料理", "建築", "その他"
-];
-
-// こだわり条件・対応可能サービス
-const SPECIAL_CONDITIONS = [
-  "早朝撮影対応", "夜間撮影対応", "雨天撮影対応", "屋内撮影対応",
-  "屋外撮影対応", "移動撮影対応", "長時間撮影対応", "急な依頼対応",
-  "編集・レタッチ込み", "RAWデータ提供", "即日納品対応", "その他"
-];
-
 export default function FirstTimeProfileSetup() {
   const navigate = useNavigate();
   const [cognitoSub, setCognitoSub] = useState(null);
@@ -60,18 +45,7 @@ export default function FirstTimeProfileSetup() {
     prefecture: "",
     bike_maker: "",
     bike_model: "",
-    shooting_genres: [],
-    price_range_min: "",
-    price_range_max: "",
-    equipment: "",
-    bio: "",
-    profile_image: null,
-    portfolio_website: "",
-    instagram_url: "",
-    twitter_url: "",
-    youtube_url: "",
-    special_conditions: [],
-    is_accepting_requests: true
+    bio: ""
   });
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -138,20 +112,7 @@ export default function FirstTimeProfileSetup() {
         prefecture: profileData.prefecture || null,
         bike_maker: profileData.bike_maker || null,
         bike_model: profileData.bike_model || null,
-        shooting_genres: profileData.shooting_genres || [],
-        price_range_min: profileData.price_range_min === "" ? null : parseFloat(profileData.price_range_min),
-        price_range_max: profileData.price_range_max === "" ? null : parseFloat(profileData.price_range_max),
-        equipment: profileData.equipment || null,
-        bio: profileData.bio || null,
-        profile_image: profileData.profile_image || null,
-        portfolio_website: profileData.portfolio_website || null,
-        instagram_url: profileData.instagram_url || null,
-        twitter_url: profileData.twitter_url || null,
-        youtube_url: profileData.youtube_url || null,
-        special_conditions: profileData.special_conditions || [],
-        is_accepting_requests: profileData.is_accepting_requests !== undefined ? profileData.is_accepting_requests : true,
-        average_rating: 0,
-        review_count: 0
+        bio: profileData.bio || null
       };
       
       console.log('FirstTimeProfileSetup - Creating user with inputData:', inputData);
@@ -283,25 +244,6 @@ export default function FirstTimeProfileSetup() {
     }
   };
 
-  // ジャンル選択処理
-  const handleGenreToggle = (genre) => {
-    setFormData(prev => ({
-      ...prev,
-      shooting_genres: prev.shooting_genres.includes(genre)
-        ? prev.shooting_genres.filter(g => g !== genre)
-        : [...prev.shooting_genres, genre]
-    }));
-  };
-
-  // 条件選択処理
-  const handleConditionToggle = (condition) => {
-    setFormData(prev => ({
-      ...prev,
-      special_conditions: prev.special_conditions.includes(condition)
-        ? prev.special_conditions.filter(c => c !== condition)
-        : [...prev.special_conditions, condition]
-    }));
-  };
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -393,8 +335,8 @@ export default function FirstTimeProfileSetup() {
             </CardContent>
           </Card>
 
-          {/* バイク情報（ライダーの場合） */}
-          {formData.user_type === 'rider' && (
+          {/* バイク情報 */}
+          {formData.user_type === 'client' && (
             <Card className="shadow-lg border-none">
               <CardHeader>
                 <CardTitle>バイク情報</CardTitle>
@@ -431,61 +373,6 @@ export default function FirstTimeProfileSetup() {
                 </div>
               </CardContent>
             </Card>
-          )}
-
-          {/* フォトグラファー情報 */}
-          {formData.user_type === 'photographer' && (
-            <>
-              {/* 撮影ジャンル */}
-              <Card className="shadow-lg border-none">
-                <CardHeader>
-                  <CardTitle>得意な撮影ジャンル</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    {SHOOTING_GENRES.map((genre) => (
-                      <Badge
-                        key={genre}
-                        onClick={() => handleGenreToggle(genre)}
-                        variant={formData.shooting_genres.includes(genre) ? "default" : "outline"}
-                        className={`cursor-pointer px-3 py-1.5 text-sm transition-all rounded-full ${
-                          formData.shooting_genres.includes(genre) 
-                            ? "bg-blue-600 border-blue-600 text-white hover:bg-blue-700" 
-                            : "bg-white border-gray-300 text-gray-700 hover:bg-gray-100"
-                        }`}
-                      >
-                        {genre}
-                      </Badge>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* こだわり条件・対応可能サービス */}
-              <Card className="shadow-lg border-none">
-                <CardHeader>
-                  <CardTitle>こだわり条件・対応可能サービス</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    {SPECIAL_CONDITIONS.map((condition) => (
-                      <Badge
-                        key={condition}
-                        onClick={() => handleConditionToggle(condition)}
-                        variant={formData.special_conditions.includes(condition) ? "default" : "outline"}
-                        className={`cursor-pointer px-3 py-1.5 text-sm transition-all rounded-full ${
-                          formData.special_conditions.includes(condition) 
-                            ? "bg-blue-600 border-blue-600 text-white hover:bg-blue-700" 
-                            : "bg-white border-gray-300 text-gray-700 hover:bg-gray-100"
-                        }`}
-                      >
-                        {condition}
-                      </Badge>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </>
           )}
 
           {/* 自己紹介 */}

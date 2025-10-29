@@ -209,6 +209,29 @@ export default function HomeForNonRegister() {
           )}
         </div>
       </div>
+      
+      {/* デバッグ用のlocalStorage確認機能 */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="fixed bottom-4 right-4 bg-gray-800 text-white p-4 rounded-lg shadow-lg z-50">
+          <h3 className="font-bold mb-2">Debug: localStorage Status</h3>
+          <div className="text-sm space-y-1">
+            <div>Auth Data: {localStorage.getItem('mockAuthData') ? '✅' : '❌'}</div>
+            <div>API Data: {localStorage.getItem('mockAPIData') ? '✅' : '❌'}</div>
+            <div>Pending User: {localStorage.getItem('mockPendingUser') ? '✅' : '❌'}</div>
+          </div>
+          <button
+            onClick={() => {
+              console.log('=== localStorage Debug Info ===');
+              console.log('mockAuthData:', localStorage.getItem('mockAuthData'));
+              console.log('mockAPIData:', localStorage.getItem('mockAPIData'));
+              console.log('mockPendingUser:', localStorage.getItem('mockPendingUser'));
+            }}
+            className="mt-2 bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-xs"
+          >
+            Log to Console
+          </button>
+        </div>
+      )}
     </div>
   );
 }

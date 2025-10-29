@@ -21,7 +21,13 @@ class MockAPIService {
         this.conversations = new Map(data.conversations || []);
         this.messages = new Map(data.messages || []);
         this.reviews = new Map(data.reviews || []);
-        console.log('Mock API data loaded from storage');
+        console.log('Mock API data loaded from storage:', {
+          usersCount: this.users.size,
+          portfoliosCount: this.portfolios.size,
+          conversationsCount: this.conversations.size,
+          messagesCount: this.messages.size,
+          reviewsCount: this.reviews.size
+        });
       }
     } catch (error) {
       console.error('Error loading mock API data:', error);
@@ -39,7 +45,7 @@ class MockAPIService {
         reviews: Array.from(this.reviews.entries())
       };
       localStorage.setItem('mockAPIData', JSON.stringify(data));
-      console.log('Mock API data saved to storage');
+      console.log('Mock API data saved to storage:', data);
     } catch (error) {
       console.error('Error saving mock API data:', error);
     }

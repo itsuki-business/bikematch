@@ -15,7 +15,12 @@ class MockAuthService {
         const data = JSON.parse(stored);
         this.currentUser = data.currentUser;
         this.isAuthenticated = data.isAuthenticated;
-        console.log('Mock auth data loaded from storage:', data);
+        console.log('Mock auth data loaded from storage:', {
+          hasCurrentUser: !!this.currentUser,
+          isAuthenticated: this.isAuthenticated,
+          userId: this.currentUser?.userId,
+          username: this.currentUser?.username
+        });
       }
     } catch (error) {
       console.error('Error loading mock auth data:', error);
@@ -84,7 +89,14 @@ class MockAuthService {
     const pendingUserData = localStorage.getItem('mockPendingUser');
     let pendingUser = null;
     if (pendingUserData) {
-      pendingUser = JSON.parse(pendingUserData);
+      try {
+        pendingUser = JSON.parse(pendingUserData);
+        console.log('Mock confirmSignUp - Found pending user:', pendingUser);
+      } catch (error) {
+        console.error('Error parsing pending user data:', error);
+      }
+    } else {
+      console.log('Mock confirmSignUp - No pending user data found');
     }
     
     // ランダムな16文字の英数字IDを生成
@@ -113,11 +125,13 @@ class MockAuthService {
     this.isAuthenticated = true;
     this.saveToStorage(); // データを永続化
     
-    // 一時データを削除
-    localStorage.removeItem('mockPendingUser');
-    
     console.log('Mock user authenticated after confirmation:', this.currentUser);
     console.log('Mock user attributes:', this.currentUser.attributes);
+    console.log('Mock auth data saved to localStorage');
+    
+    // 一時データを削除
+    localStorage.removeItem('mockPendingUser');
+    console.log('Mock pending user data removed from localStorage');
     
     return {
       isSignUpComplete: true,
@@ -157,6 +171,9 @@ class MockAuthService {
     };
     this.isAuthenticated = true;
     this.saveToStorage(); // データを永続化
+    
+    console.log('Mock user authenticated after sign in:', this.currentUser);
+    console.log('Mock auth data saved to localStorage');
     
     return {
       isSignedIn: true,
